@@ -1,0 +1,12 @@
+spinnaker:
+  cassandra:
+    cluster: 'spinnaker'
+    keyspace: 'tide'
+netflix:
+  appinfo:
+    name: 'spinnaker-tide'
+
+server:
+  port: 8097
+
+

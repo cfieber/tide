@@ -1,0 +1,94 @@
+/*
+ * Copyright 2015 Netflix, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+applicationDefaultJvmArgs = [
+  "-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005"
+]
+
+buildscript {
+  repositories {
+    jcenter()
+    maven { url "http://dl.bintray.com/spinnaker/gradle" }
+  }
+  dependencies {
+    classpath "com.netflix.spinnaker:spinnaker-gradle-project:1.12.67"
+  }
+}
+
+ext {
+  springBootVersion = "1.2.1.RELEASE"
+}
+
+tasks.withType(ScalaCompile) {
+  scalaCompileOptions.useAnt = false
+}
+
+allprojects {
+  apply plugin: "spinnaker-gradle-project"
+  apply plugin: "groovy"
+  apply plugin: "scala"
+
+  group = "com.netflix.spinnaker.tide"
+
+  sourceCompatibility = "1.8"
+  targetCompatibility = "1.8"
+
+  configurations.all {
+    exclude group: "javax.servlet", module: "servlet-api"
+    exclude group: "org.slf4j", module: "slf4j-log4j12"
+    resolutionStrategy {
+      force "com.google.guava:guava:14.0.1"
+    }
+  }
+
+  ext {
+    versions = [
+      scala  : "2.11",
+      akka   : "2.3.9",
+      scalaTest: "2.2.4"
+    ]
+  }
+
+  repositories {
+    maven { url "http://dl.bintray.com/krasserm/maven/" }
+    maven { url "http://dl.bintray.com/jdgoldie/maven" }
+  }
+
+  dependencies {
+    compile "javax.inject:javax.inject:1"
+    compile spinnaker.dependency("slf4jApi")
+    compile "org.scala-lang:scala-library:$versions.scala.6"
+    compile "com.typesafe.akka:akka-actor_$versions.scala:$versions.akka"
+    compile "com.typesafe.akka:akka-persistence-experimental_$versions.scala:$versions.akka"
+    compile "com.typesafe.akka:akka-cluster_$versions.scala:$versions.akka"
+    compile "com.typesafe.akka:akka-contrib_$versions.scala:$versions.akka"
+    compile "com.fasterxml.jackson.module:jackson-module-scala_$versions.scala:2.5.2"
+    compile "com.github.krasserm:akka-persistence-cassandra-12_2.11:0.3.4"
+    compile "com.netflix.astyanax:astyanax-cassandra:3.1.0"
+    compile "com.squareup.okhttp:okhttp:2.4.0"
+    compile 'com.netflix.frigga:frigga:0.13'
+
+    testCompile "org.scala-lang.modules:scala-xml_$versions.scala:1.0.1"
+    testCompile "org.scalatest:scalatest_$versions.scala:$versions.scalaTest"
+    testCompile "com.typesafe.akka:akka-actor-tests_$versions.scala:$versions.akka"
+    testCompile "org.scalamock:scalamock-scalatest-support_$versions.scala:3.2"
+
+    testRuntime "com.github.jdgoldie:akka-persistence-shared-inmemory_$versions.scala:1.0.16"
+    testRuntime spinnaker.dependency("slf4jSimple")
+  }
+}
+
+defaultTasks ':tide-web:bootRun'

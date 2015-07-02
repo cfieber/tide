@@ -1,0 +1,18 @@
+configurations {
+  all*.exclude module: "gson"
+}
+
+dependencies {
+  spinnaker.group("retrofitDefault")
+
+  compile "com.netflix:akka-spring:0.8"
+  compile spinnaker.dependency("springContext")
+  compile spinnaker.dependency("jacksonJsr310")
+  compile spinnaker.dependency("korkCassandra")
+
+  testCompile "com.miguno.akka:akka-mock-scheduler_2.11:0.3.0"
+  testCompile spinnaker.dependency("retrofitMock")
+  testCompile spinnaker.dependency("spockSpring")
+  testCompile spinnaker.dependency("springTest")
+  testCompile "org.hamcrest:hamcrest-all:1.3"
+}
