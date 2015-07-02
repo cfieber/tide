@@ -29,7 +29,7 @@ import retrofit.converter.JacksonConverter
 
 class EddaServiceBuilder {
 
-  def constructEddaService(event: Start): EddaService = {
+  def constructEddaService(account: String, region: String, eddaUrlTemplate: String): EddaService = {
     val objectMapper: ObjectMapper = new ObjectMapper()
     objectMapper.registerModule(DefaultScalaModule)
       .registerModule(new JSR310Module)
@@ -37,7 +37,7 @@ class EddaServiceBuilder {
       .enable(ACCEPT_SINGLE_VALUE_AS_ARRAY)
       .enable(ACCEPT_EMPTY_STRING_AS_NULL_OBJECT)
       .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-    val eddaUrl = event.eddaUrlTemplate.replaceAll("%account", event.account).replaceAll("%region", event.region)
+    val eddaUrl = eddaUrlTemplate.replaceAll("%account", account).replaceAll("%region", region)
     val endpoint = newFixedEndpoint(eddaUrl)
     new Builder().
       setEndpoint(endpoint).

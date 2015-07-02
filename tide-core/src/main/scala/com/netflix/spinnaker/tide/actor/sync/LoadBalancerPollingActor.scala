@@ -18,14 +18,18 @@ package com.netflix.spinnaker.tide.actor.sync
 
 import akka.actor.{Props, ActorRef, ActorLogging, Actor}
 import akka.contrib.pattern.ClusterSharding
+import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.sync.AwsApi._
 import com.netflix.spinnaker.tide.api.EddaService
 import scala.concurrent.duration.DurationInt
 
-class LoadBalancerPollingActor extends Actor with ActorLogging {
+class LoadBalancerPollingActor extends PersistentActor with ActorLogging {
+
+  override def persistenceId: String = self.path.name
 
   var account: String = _
   var region: String = _
+  var eddaUrlTemplate: String = _
   var cloudDriver: CloudDriverActor.Ref = _
   var eddaService: EddaService = _
 
@@ -48,16 +52,16 @@ class LoadBalancerPollingActor extends Actor with ActorLogging {
     super.preRestart(reason, message)
   }
 
-  def constructEddaService(event: Start): EddaService = {
-    new EddaServiceBuilder().constructEddaService(event)
+  def constructEddaService(): EddaService = {
+    new EddaServiceBuilder().constructEddaService(account, region, eddaUrlTemplate)
   }
 
-  override def receive: Receive = {
+  override def receiveCommand: Receive = {
     case event: Start =>
-      account = event.account
-      region = event.region
-      cloudDriver = event.cloudDriver
-      eddaService = constructEddaService(event)
+      persist(event) { it =>
+        updateState(it)
+        eddaService = constructEddaService()
+      }
 
     case event: Poll =>
       val subnets = eddaService.subnets
@@ -87,6 +91,24 @@ class LoadBalancerPollingActor extends Actor with ActorLogging {
         loadBalancerCluster ! AwsResourceProtocol(AwsReference(AwsLocation(account, region), loadBalancer.identity),
           latestState, Option(cloudDriver))
       }
+  }
+
+  private def updateState(event: Start) = {
+    event match {
+      case event: Start =>
+        account = event.account
+        region = event.region
+        eddaUrlTemplate = event.eddaUrlTemplate
+        cloudDriver = event.cloudDriver
+      case _ => Nil
+    }
+  }
+
+  override def receiveRecover: Receive = {
+    case RecoveryCompleted =>
+      eddaService = constructEddaService()
+    case event: Start =>
+      updateState(event)
   }
 
 }

@@ -258,7 +258,7 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
         target = event.options.target
         targetVpc = event.targetVpc
         cloneServerGroupTaskId = None
-        history = s"Start deep copy of : ${sourceReference.akkaIdentifier}" :: history
+        history = s"Start deep copy of ${sourceReference.akkaIdentifier}" :: history
       case event: DeepCopyFailure =>
         history = s"Failure: ${event.message}" :: history
       case event: DeepCopyComplete =>

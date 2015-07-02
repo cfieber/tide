@@ -110,7 +110,8 @@ case class CloneServerGroupOperation(application: String, stack: String, freeFor
                                      associatePublicIpAddress: Option[Boolean], ramdiskId: String,
                                      terminationPolicies: Set[String], suspendedProcesses: Set[String],
                                      spotPrice: Option[String], healthCheckType: String, healthCheckGracePeriod: Int,
-                                     cooldown: Int, ebsOptimized: Boolean, startDisabled: Boolean, source: Source) extends CloudDriverOperation {
+                                     cooldown: Int, instanceMonitoring: Boolean, ebsOptimized: Boolean,
+                                     startDisabled: Boolean, source: Source) extends CloudDriverOperation {
   val operationTypeName = "copyLastAsgDescription"
 }
 object CloneServerGroupOperation {
@@ -136,8 +137,8 @@ object CloneServerGroupOperation {
       launchConfiguration.instanceType, launchConfiguration.associatePublicIpAddress, launchConfiguration.ramdiskId,
       autoScalingGroup.terminationPolicies, autoScalingGroup.suspendedProcesses.map(_.processName),
       launchConfiguration.spotPrice, autoScalingGroup.healthCheckType, autoScalingGroup.healthCheckGracePeriod,
-      autoScalingGroup.defaultCooldown, launchConfiguration.ebsOptimized, cloneServerGroup.startDisabled,
-      Source.from(awsReference))
+      autoScalingGroup.defaultCooldown, launchConfiguration.instanceMonitoring.enabled,
+      launchConfiguration.ebsOptimized, cloneServerGroup.startDisabled, Source.from(awsReference))
   }
 }
 

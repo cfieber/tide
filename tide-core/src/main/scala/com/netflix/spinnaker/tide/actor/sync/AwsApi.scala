@@ -89,13 +89,11 @@ object AwsApi {
   case class LaunchConfigurationState(createdTime: Long,
                                       associatePublicIpAddress: Option[Boolean],
                                       ebsOptimized: Boolean, iamInstanceProfile: String, imageId: String,
-                                      instanceType: String, kernelId: String,
+                                      instanceMonitoring: InstanceMonitoring, instanceType: String, kernelId: String,
                                       keyName: String, ramdiskId: String,
-                                      securityGroups: Set[String], spotPrice: Option[String]) {
-    def onlyMutableState = {
-      copy(createdTime = 0)
-    }
-  }
+                                      securityGroups: Set[String], spotPrice: Option[String])
+
+  case class InstanceMonitoring(enabled: Boolean)
 
   case class AutoScalingGroup(@JsonUnwrapped @JsonProperty("identity") identity: AutoScalingGroupIdentity,
                               @JsonUnwrapped @JsonProperty("state") state: AutoScalingGroupState)
@@ -114,11 +112,7 @@ object AwsApi {
                                    healthCheckType: String, loadBalancerNames: Set[String],
                                    maxSize: Int, minSize: Int, suspendedProcesses: Set[SuspendedProcess],
                                    terminationPolicies: Set[String],
-                                   subnetType: Option[String], vpcId: Option[String]) {
-    def onlyMutableState = {
-      copy(createdTime = 0)
-    }
-  }
+                                   subnetType: Option[String], vpcId: Option[String])
 
   case class SuspendedProcess(processName: String, suspensionReason: String)
 
