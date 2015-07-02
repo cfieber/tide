@@ -76,8 +76,6 @@ allprojects {
     compile "com.typesafe.akka:akka-cluster_$versions.scala:$versions.akka"
     compile "com.typesafe.akka:akka-contrib_$versions.scala:$versions.akka"
     compile "com.fasterxml.jackson.module:jackson-module-scala_$versions.scala:2.5.2"
-    compile "com.github.krasserm:akka-persistence-cassandra-12_2.11:0.3.4"
-    compile "com.netflix.astyanax:astyanax-cassandra:3.1.0"
     compile "com.squareup.okhttp:okhttp:2.4.0"
     compile 'com.netflix.frigga:frigga:0.13'
 

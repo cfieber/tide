@@ -8,7 +8,7 @@ dependencies {
   compile "com.netflix:akka-spring:0.8"
   compile spinnaker.dependency("springContext")
   compile spinnaker.dependency("jacksonJsr310")
-  compile spinnaker.dependency("korkCassandra")
+  compile 'org.springframework.boot:spring-boot:1.2.1.RELEASE'
 
   testCompile "com.miguno.akka:akka-mock-scheduler_2.11:0.3.0"
   testCompile spinnaker.dependency("retrofitMock")

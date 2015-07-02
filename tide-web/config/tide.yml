@@ -1,7 +1,4 @@
 spinnaker:
-  cassandra:
-    cluster: 'spinnaker'
-    keyspace: 'tide'
 netflix:
   appinfo:
     name: 'spinnaker-tide'

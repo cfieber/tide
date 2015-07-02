@@ -16,9 +16,10 @@
 
 package com.netflix.spinnaker.tide.actor
 
+import com.netflix.spinnaker.tide.api.SpinnakerService
+
 import scala.collection.JavaConversions._
 import com.netflix.akka.spring.AkkaConfiguration
-import com.netflix.astyanax.Keyspace
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.{Autowired, Value}
@@ -29,7 +30,6 @@ import scala.collection.JavaConverters._
 @Import(Array(classOf[AkkaConfiguration]))
 class ActorSystemConfiguration {
 
-  @Autowired var keyspace: Keyspace = _
   @Autowired var spinnakerService: SpinnakerService = _
 
   @Value("${akka.cluster.port:2551}") var clusterPort: String = _
@@ -37,18 +37,9 @@ class ActorSystemConfiguration {
 
   @Bean
   @Primary
-  def akkaConfig(@Value("${spinnaker.cassandra.cluster}") cluster: String): Config = {
+  def akkaConfig(): Config = {
     var config: Config = ConfigFactory.empty()
       .withValue("akka.remote.netty.tcp.port", ConfigValueFactory.fromAnyRef(clusterPort))
-
-//    val contactPoints = keyspace.getConnectionPool.getActivePools.map(_.getHost.getHostName)
-//    log.info(s"Configuring Akka persistence with C* cluster $cluster, keyspace ${keyspace.getKeyspaceName}")
-//    log.info("C* contact points: \n{}", contactPoints.mkString("\n"))
-//    config = config
-//      .withValue("cassandra-journal.contact-points", ConfigValueFactory.fromIterable(contactPoints))
-//      .withValue("cassandra-journal.keyspace", ConfigValueFactory.fromAnyRef(keyspace.getKeyspaceName))
-//      .withValue("cassandra-snapshot-store.contact-points", ConfigValueFactory.fromIterable(contactPoints))
-//      .withValue("cassandra-snapshot-store.keyspace", ConfigValueFactory.fromAnyRef(keyspace.getKeyspaceName))
 
     config = sys.env.get("NETFLIX_CLUSTER") match {
       case Some(currentCluster) =>

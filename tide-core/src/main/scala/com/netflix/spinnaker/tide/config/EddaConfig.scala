@@ -23,12 +23,14 @@ import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.sync.AwsApi.AwsLocation
 import com.netflix.spinnaker.tide.actor.sync._
 import com.netflix.spinnaker.tide.api.EddaService
-import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.{Value, Autowired}
 import org.springframework.boot.context.properties.ConfigurationProperties
-import org.springframework.context.annotation.{Configuration, Bean}
+import org.springframework.context.annotation.{Bean, Configuration}
+import retrofit.RestAdapter
 import retrofit.client.Client
-import scala.collection.JavaConversions._
+
 import scala.beans.BeanProperty
+import scala.collection.JavaConversions._
 
 @Configuration
 class EddaConfig {
