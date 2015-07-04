@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-package com.netflix.spinnaker.tide.actor.sync
+package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
-import akka.persistence.PersistentActor
-import com.netflix.spinnaker.tide.actor.sync.AwsApi._
-import com.netflix.spinnaker.tide.api.UpsertSecurityGroupOperation
+import akka.persistence.{RecoveryCompleted, PersistentActor}
+import com.netflix.spinnaker.tide.actor.aws.AwsApi.{AwsReference, LoadBalancerIdentity}
+import com.netflix.spinnaker.tide.api.UpsertLoadBalancerOperation
 import scala.concurrent.duration.DurationInt
 
-class SecurityGroupActor extends PersistentActor with ActorLogging {
+class LoadBalancerActor extends PersistentActor with ActorLogging {
 
   override def persistenceId: String = self.path.name
 
@@ -33,34 +33,34 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
   private implicit val dispatcher = context.dispatcher
   var latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
 
-  var awsReference: AwsReference[SecurityGroupIdentity] = _
+  var awsReference: AwsReference[LoadBalancerIdentity] = _
   var cloudDriver: Option[ActorRef] = None
-  var desiredState: Option[UpsertSecurityGroup] = None
-  var latestState: Option[SecurityGroupLatestState] = None
+  var desiredState: Option[UpsertLoadBalancer] = None
+  var latestState: Option[LoadBalancerLatestState] = None
 
   override def postStop(): Unit = latestStateTimeout.cancel()
 
   override def receiveCommand: Receive = {
     case wrapper: AwsResourceProtocol[_] =>
-      handleAwsResourceProtocol(wrapper.awsReference.asInstanceOf[AwsReference[SecurityGroupIdentity]],
-        wrapper.event.asInstanceOf[SecurityGroupEvent], wrapper.cloudDriver)
+      handleAwsResourceProtocol(wrapper.awsReference.asInstanceOf[AwsReference[LoadBalancerIdentity]],
+        wrapper.event.asInstanceOf[LoadBalancerEvent], wrapper.cloudDriver)
 
     case LatestStateTimeout =>
+      latestStateTimeout = scheduler.scheduleOnce(60 seconds, self, LatestStateTimeout)
       latestState = None
       desiredState.foreach(mutate)
 
     case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
   }
 
-  private def handleAwsResourceProtocol(newAwsReference: AwsReference[SecurityGroupIdentity], event: SecurityGroupEvent,
-                                        newCloudDriverReference: Option[ActorRef]) = event match {
+  private def handleAwsResourceProtocol(newAwsReference: AwsReference[LoadBalancerIdentity], event: LoadBalancerEvent,
+                                                     newCloudDriverReference: Option[ActorRef]) = event match {
+    case event: GetLoadBalancer =>
+      updateReferences(newCloudDriverReference, newAwsReference)
+      sender() ! new LoadBalancerDetails(newAwsReference, latestState, desiredState)
 
-    case event: GetSecurityGroup =>
-      updateReferences(newAwsReference, newCloudDriverReference)
-      sender() ! new SecurityGroupDetails(newAwsReference, latestState, desiredState)
-
-    case event: UpsertSecurityGroup =>
-      updateReferences(newAwsReference, newCloudDriverReference)
+    case event: UpsertLoadBalancer =>
+      updateReferences(newCloudDriverReference, newAwsReference)
       if (desiredState != Option(event)) {
         persist(event) { e =>
           updateState(event)
@@ -68,8 +68,8 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
         }
       }
 
-    case event: SecurityGroupLatestState =>
-      updateReferences(newAwsReference, newCloudDriverReference)
+    case event: LoadBalancerLatestState =>
+      updateReferences(newCloudDriverReference, newAwsReference)
       latestStateTimeout.cancel()
       latestStateTimeout = scheduler.scheduleOnce(60 seconds, self, LatestStateTimeout)
       if (latestState != Option(event)) {
@@ -82,21 +82,18 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
       }
   }
 
-  private def mutate(upsertSecurityGroup: UpsertSecurityGroup) = {
+  private def mutate(upsertLoadBalancer: UpsertLoadBalancer) = {
     latestState match {
       case None =>
         cloudDriver.foreach { cloudDriverActor =>
-          val stateWithoutIngress = upsertSecurityGroup.state.copy(ipPermissions = Set())
-          val eventWithoutIngress = upsertSecurityGroup.copy(state = stateWithoutIngress)
-          cloudDriverActor ! AwsResourceProtocol(awsReference, eventWithoutIngress)
-          cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
+          cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
         }
       case Some(latest) =>
-        if(UpsertSecurityGroupOperation.from(awsReference, latest.state) == UpsertSecurityGroupOperation.from(awsReference, upsertSecurityGroup.state)) {
+        if (UpsertLoadBalancerOperation.from(awsReference, latest.state) == UpsertLoadBalancerOperation.from(awsReference, upsertLoadBalancer.state)) {
           desiredState = None
         } else {
-          if (upsertSecurityGroup.overwrite) {
-            cloudDriver.foreach(_ ! AwsResourceProtocol(awsReference, upsertSecurityGroup))
+          if (upsertLoadBalancer.overwrite) {
+            cloudDriver.foreach(_ ! AwsResourceProtocol(awsReference, upsertLoadBalancer))
           } else {
             desiredState = None
           }
@@ -104,38 +101,40 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
     }
   }
 
-  private def updateReferences(awsReference: AwsReference[SecurityGroupIdentity], newCloudDriverReference: Option[ActorRef]) = {
+  private def updateReferences(newCloudDriverReference: Option[ActorRef], newAwsReference: AwsReference[LoadBalancerIdentity]) = {
     if (newCloudDriverReference.isDefined) {
       cloudDriver = newCloudDriverReference
     }
-    this.awsReference = awsReference
+    awsReference = newAwsReference
   }
 
   private def updateState(event: AwsResourceEvent) = {
     event match {
-      case event: UpsertSecurityGroup =>
+      case event: UpsertLoadBalancer =>
         desiredState = Option(event)
-      case event: SecurityGroupLatestState =>
+      case event: LoadBalancerLatestState =>
         latestState = Option(event)
       case _ => Nil
     }
   }
 
   override def receiveRecover: Receive = {
-    case event: SecurityGroupEvent =>
+    case RecoveryCompleted =>
+      self ! LatestStateTimeout
+    case event: LoadBalancerEvent =>
       updateState(event)
   }
 
 }
 
-object SecurityGroupActor {
+object LoadBalancerActor {
   type Ref = ActorRef
   val typeName: String = this.getClass.getCanonicalName
 
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(
       typeName = typeName,
-      entryProps = Some(Props[SecurityGroupActor]),
+      entryProps = Some(Props[LoadBalancerActor]),
       idExtractor = {
         case msg: AwsResourceProtocol[_] =>
           (msg.akkaIdentifier, msg)
@@ -146,3 +145,4 @@ object SecurityGroupActor {
       })
   }
 }
+

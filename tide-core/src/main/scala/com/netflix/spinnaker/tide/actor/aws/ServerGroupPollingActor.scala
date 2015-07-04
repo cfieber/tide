@@ -14,55 +14,21 @@
  * limitations under the License.
  */
 
-package com.netflix.spinnaker.tide.actor.sync
+package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{Props, ActorRef, ActorLogging, Actor}
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
-import com.netflix.spinnaker.tide.actor.sync.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.api.EddaService
 import scala.concurrent.duration.DurationInt
 
-class ServerGroupPollingActor extends PersistentActor with ActorLogging {
-
-  override def persistenceId: String = self.path.name
-
-  var account: String = _
-  var region: String = _
-  var eddaUrlTemplate: String = _
-  var cloudDriver: CloudDriverActor.Ref = _
-  var eddaService: EddaService = _
-
-  def serverGroupCluster: ActorRef = {
-    ClusterSharding.get(context.system).shardRegion(ServerGroupActor.typeName)
-  }
-
-  private implicit val dispatcher = context.dispatcher
-  def scheduler = context.system.scheduler
-  private val scheduledPolling = scheduler.schedule(0 seconds, 15 seconds, self, Poll())
+class ServerGroupPollingActor extends PollingActor {
 
   var securityGroupIdToName: Map[String, SecurityGroupIdentity] = Map()
   var launchConfigNameToAutoScalingGroup: Map[String, AutoScalingGroup] = Map()
 
-  override def postStop(): Unit = scheduledPolling.cancel()
-
-  override def preRestart(reason: Throwable, message: Option[Any]) = {
-    reason.printStackTrace()
-    super.preRestart(reason, message)
-  }
-
-  def constructEddaService(): EddaService = {
-    new EddaServiceBuilder().constructEddaService(account, region, eddaUrlTemplate)
-  }
-
-  override def receiveCommand: Receive = {
-    case event: Start =>
-      persist(event) { it =>
-        updateState(it)
-        eddaService = constructEddaService()
-      }
-
-    case event: Poll =>
+  override def poll() = {
       val subnets = eddaService.subnets
       val launchConfigurations = eddaService.launchConfigurations
       val autoScalingGroups = eddaService.autoScalingGroups
@@ -97,49 +63,16 @@ class ServerGroupPollingActor extends PersistentActor with ActorLogging {
             }
           }
           val latestState = ServerGroupLatestState(normalizedAutoScalingGroupState, normalizedLaunchConfigurationState)
-          serverGroupCluster ! AwsResourceProtocol(AwsReference(AwsLocation(account, region), autoScalingGroup.identity),
+          resourceCluster(ServerGroupActor.typeName) ! AwsResourceProtocol(AwsReference(AwsLocation(account, region), autoScalingGroup.identity),
             latestState, Option(cloudDriver))
         }
       }
   }
-
-  private def updateState(event: Start) = {
-    event match {
-      case event: Start =>
-        account = event.account
-        region = event.region
-        eddaUrlTemplate = event.eddaUrlTemplate
-        cloudDriver = event.cloudDriver
-      case _ => Nil
-    }
-  }
-
-  override def receiveRecover: Receive = {
-    case RecoveryCompleted =>
-      eddaService = constructEddaService()
-    case event: Start =>
-      updateState(event)
-  }
-
 }
 
-object ServerGroupPollingActor {
+object ServerGroupPollingActor extends PollingActorObject {
   type Ref = ActorRef
-  val typeName: String = this.getClass.getCanonicalName
-
-  def startCluster(clusterSharding: ClusterSharding) = {
-    clusterSharding.start(
-      typeName = typeName,
-      entryProps = Some(Props[ServerGroupPollingActor]),
-      idExtractor = {
-        case msg: Start =>
-          (msg.akkaIdentifier, msg)
-      },
-      shardResolver = {
-        case msg: Start =>
-          (msg.akkaIdentifier.hashCode % 10).toString
-      })
-  }
+  val props = Props[ServerGroupPollingActor]
 }
 
 

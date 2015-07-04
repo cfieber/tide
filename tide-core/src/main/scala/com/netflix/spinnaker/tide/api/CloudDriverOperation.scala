@@ -18,8 +18,8 @@ package com.netflix.spinnaker.tide.api
 
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.netflix.frigga.Names
-import com.netflix.spinnaker.tide.actor.sync.AwsApi._
-import com.netflix.spinnaker.tide.actor.sync.CloneServerGroup
+import com.netflix.spinnaker.tide.actor.aws.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.CloneServerGroup
 
 
 sealed trait CloudDriverOperation {
@@ -130,6 +130,12 @@ object CloneServerGroupOperation {
     val application = cloneServerGroup.application.getOrElse(names.getApp)
     val stack = cloneServerGroup.stack.getOrElse(names.getStack)
     val detail = cloneServerGroup.detail.getOrElse(names.getDetail)
+
+    val isInstanceMonitoringEnabled: Boolean = Option(launchConfiguration.instanceMonitoring) match {
+      case None => false
+      case Some(instanceMonitoring) => instanceMonitoring.enabled
+    }
+
     CloneServerGroupOperation(application, stack, detail,
       autoScalingGroup.subnetType, autoScalingGroup.vpcId, availabilityZones,
       awsLocation.account, launchConfiguration.securityGroups, autoScalingGroup.loadBalancerNames, capacity,
@@ -137,7 +143,7 @@ object CloneServerGroupOperation {
       launchConfiguration.instanceType, launchConfiguration.associatePublicIpAddress, launchConfiguration.ramdiskId,
       autoScalingGroup.terminationPolicies, autoScalingGroup.suspendedProcesses.map(_.processName),
       launchConfiguration.spotPrice, autoScalingGroup.healthCheckType, autoScalingGroup.healthCheckGracePeriod,
-      autoScalingGroup.defaultCooldown, launchConfiguration.instanceMonitoring.enabled,
+      autoScalingGroup.defaultCooldown, isInstanceMonitoringEnabled,
       launchConfiguration.ebsOptimized, cloneServerGroup.startDisabled, Source.from(awsReference))
   }
 }

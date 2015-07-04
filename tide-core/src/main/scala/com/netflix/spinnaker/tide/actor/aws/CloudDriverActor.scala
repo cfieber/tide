@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.netflix.spinnaker.tide.actor.sync
+package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{ActorRef, ActorLogging, Actor}
-import com.netflix.spinnaker.tide.actor.sync.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.api.CloudDriverService.TaskDetail
 import com.netflix.spinnaker.tide.api._
 

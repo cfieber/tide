@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package com.netflix.spinnaker.tide.actor.sync
+package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.PersistentActor
-import com.netflix.spinnaker.tide.actor.sync.AwsApi.{AwsReference, ServerGroupIdentity}
+import com.netflix.spinnaker.tide.actor.aws.AwsApi.{AwsReference, ServerGroupIdentity}
 import scala.concurrent.duration.DurationInt
 
 class ServerGroupActor extends PersistentActor with ActorLogging {

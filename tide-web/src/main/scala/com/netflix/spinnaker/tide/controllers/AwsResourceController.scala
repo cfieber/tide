@@ -19,9 +19,9 @@ package com.netflix.spinnaker.tide.controllers
 import akka.actor.{Props, ActorSystem, ActorRef}
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
-import com.netflix.spinnaker.tide.actor.sync.AwsApi._
-import com.netflix.spinnaker.tide.actor.sync.Target
-import com.netflix.spinnaker.tide.actor.sync._
+import com.netflix.spinnaker.tide.actor.aws.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.Target
+import com.netflix.spinnaker.tide.actor.aws._
 import com.netflix.spinnaker.tide.api.CloudDriverService.TaskDetail
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RequestMethod._

@@ -20,7 +20,7 @@ import javax.annotation.PostConstruct
 
 import akka.actor.ActorSystem
 import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.tide.actor.sync._
+import com.netflix.spinnaker.tide.actor.aws._
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.context.annotation.{Bean, Configuration}
 

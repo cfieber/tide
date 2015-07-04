@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.netflix.spinnaker.tide.actor.sync
+package com.netflix.spinnaker.tide.actor.aws
 
 import com.fasterxml.jackson.databind.DeserializationFeature._
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}

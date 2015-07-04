@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package com.netflix.spinnaker.tide.actor.sync
+package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{Props, ActorRef, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import akka.util.Timeout
 import com.fasterxml.jackson.annotation.JsonIgnore
-import com.netflix.spinnaker.tide.actor.sync.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import scala.concurrent.duration.DurationInt
 
 class DeepCopyDirector extends PersistentActor with ActorLogging {
@@ -68,11 +68,6 @@ class DeepCopyDirector extends PersistentActor with ActorLogging {
       persist(event) { it =>
         updateState(it)
       }
-
-    case event: DeepCopyFailure =>
-      persist(event) { it =>
-        updateState(it)
-      }
   }
 
   override def receiveRecover: Receive = {
@@ -85,7 +80,7 @@ class DeepCopyDirector extends PersistentActor with ActorLogging {
     event match {
       case event: DeepCopyOptions =>
         currentDeepCopiesById += (event.akkaIdentifier -> event)
-      case event: DeepCopyComplete =>
+      case event: DeepCopySuccess =>
         currentDeepCopiesById -= event.options.akkaIdentifier
       case event: DeepCopyFailure =>
         currentDeepCopiesById -= event.options.akkaIdentifier

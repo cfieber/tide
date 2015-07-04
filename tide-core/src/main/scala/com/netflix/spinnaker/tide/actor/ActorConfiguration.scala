@@ -18,7 +18,7 @@ package com.netflix.spinnaker.tide.actor
 
 import akka.actor.ActorSystem
 import com.netflix.akka.spring.{ActorFactory, AkkaConfiguration}
-import com.netflix.spinnaker.tide.actor.sync.{AwsResourceActor, CloudDriverActor}
+import com.netflix.spinnaker.tide.actor.aws.{AwsResourceActor, CloudDriverActor}
 import com.netflix.spinnaker.tide.api.CloudDriverService
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.config.ConfigurableBeanFactory.SCOPE_PROTOTYPE

@@ -16,7 +16,7 @@
 
 package com.netflix.spinnaker.tide.api
 
-import com.netflix.spinnaker.tide.actor.sync.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import retrofit.http.{GET, Headers}
 
 trait EddaService {

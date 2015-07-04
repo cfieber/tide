@@ -20,8 +20,8 @@ import javax.annotation.PostConstruct
 
 import akka.actor.ActorRef
 import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.tide.actor.sync.AwsApi.AwsLocation
-import com.netflix.spinnaker.tide.actor.sync._
+import com.netflix.spinnaker.tide.actor.aws.AwsApi.AwsLocation
+import com.netflix.spinnaker.tide.actor.aws._
 import com.netflix.spinnaker.tide.api.EddaService
 import org.springframework.beans.factory.annotation.{Value, Autowired}
 import org.springframework.boot.context.properties.ConfigurationProperties

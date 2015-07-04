@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package com.netflix.spinnaker.tide.actor.sync
+package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{ActorRef, ActorLogging, Actor}
 import akka.contrib.pattern.ClusterSharding
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
-import com.netflix.spinnaker.tide.actor.sync.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import scala.concurrent.duration.DurationInt
 
 class AwsResourceActor(private val cloudDriver: CloudDriverActor.Ref) extends Actor with ActorLogging {
@@ -108,10 +108,6 @@ case class ClusterName(appName: String, stack: String, detail: String) {
 }
 
 case class LatestStateTimeout()
-case class Poll()
-case class Start(account: String, region: String, eddaUrlTemplate: String, cloudDriver: CloudDriverActor.Ref) extends AkkaClustered {
-  override val akkaIdentifier: String = s"$account.$region"
-}
 
 object AwsResourceActor {
   type Ref = ActorRef
