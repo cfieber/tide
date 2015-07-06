@@ -47,8 +47,13 @@ class ActorSystemConfiguration {
         val currentApp = sys.env("NETFLIX_APP")
         val currentAccount = sys.env("NETFLIX_ENVIRONMENT")
         val clusterDetail = spinnakerService.getClusterDetail(currentApp, currentAccount, currentCluster)
-        val allInstancesInCluster = clusterDetail.serverGroups.flatMap(_.instances)
-        val seeds: List[String] = allInstancesInCluster map (instance => s"akka.tcp://$actorSystemName@${instance.privateIpAddress}:$clusterPort")
+        val serverGroups = clusterDetail.serverGroups
+        val seeds: List[String] = if (serverGroups.nonEmpty) {
+          val allInstancesInCluster = serverGroups.flatMap(_.instances)
+          allInstancesInCluster map (instance => s"akka.tcp://$actorSystemName@${instance.privateIpAddress}:$clusterPort")
+        } else {
+          Nil
+        }
         config
           .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(currentIp))
           .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seeds.asJava))
