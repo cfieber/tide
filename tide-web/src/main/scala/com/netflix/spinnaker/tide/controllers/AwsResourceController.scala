@@ -20,7 +20,9 @@ import akka.actor.{Props, ActorSystem, ActorRef}
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.Target
+import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
+import com.netflix.spinnaker.tide.actor.aws.CloudDriverActor.CloudDriverResponse
+import com.netflix.spinnaker.tide.actor.aws.DeepCopyDirector.{DeepCopyOptions, Target}
 import com.netflix.spinnaker.tide.actor.aws._
 import com.wordnik.swagger.annotations.{ApiOperation, Api}
 import org.springframework.beans.factory.annotation.Autowired

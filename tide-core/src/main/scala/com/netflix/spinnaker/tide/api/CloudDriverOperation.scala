@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide.api
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.netflix.frigga.Names
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.CloneServerGroup
+import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.CloneServerGroup
 
 
 sealed trait CloudDriverOperation {

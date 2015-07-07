@@ -3,6 +3,8 @@ package com.netflix.spinnaker.tide.controllers
 import akka.actor.ActorRef
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
+import com.netflix.spinnaker.tide.actor.aws.DeepCopyActor.{GetDeepCopyStatus, DeepCopyStatus}
+import com.netflix.spinnaker.tide.actor.aws.DeepCopyDirector.GetAllDeepCopyTasks
 import com.netflix.spinnaker.tide.actor.aws._
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RequestMethod._

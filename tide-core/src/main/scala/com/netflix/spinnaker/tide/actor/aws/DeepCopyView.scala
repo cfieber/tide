@@ -17,6 +17,7 @@
 package com.netflix.spinnaker.tide.actor.aws
 
 import akka.persistence.PersistentView
+import com.netflix.spinnaker.tide.actor.aws.DeepCopyActor.GetDeepCopyStatus
 
 class DeepCopyView(id: String) extends PersistentView {
   override def persistenceId: String = id

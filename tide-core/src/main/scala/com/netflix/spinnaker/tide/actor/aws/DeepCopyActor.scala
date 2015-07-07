@@ -21,7 +21,11 @@ import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.api.CloudDriverService.TaskDetail
+import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
+import com.netflix.spinnaker.tide.actor.aws.CloudDriverActor.{GetTaskDetail, CloudDriverResponse}
+import com.netflix.spinnaker.tide.actor.aws.DeepCopyActor._
+import com.netflix.spinnaker.tide.actor.aws.DeepCopyDirector.{Target, DeepCopyOptions}
+import com.netflix.spinnaker.tide.actor.aws.VpcPollingActor.GetVpcs
 import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 import akka.pattern.ask
@@ -341,31 +345,33 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
 
 }
 
-sealed trait DeepCopyComplete
-case class DeepCopySuccess(options: DeepCopyOptions, newServerGroupName: String) extends DeepCopyComplete
-case class DeepCopyFailure(options: DeepCopyOptions, message: String) extends DeepCopyComplete
-
-case class CheckForCreatedResources()
-case class Requires(awsIdentity: AwsIdentity)
-case class Found(awsIdentity: AwsIdentity)
-case class StartServerGroupCloning()
-case class CloneServerGroupTask(response: CloudDriverResponse)
-case class DeepCopyStatus(history: List[Any], cloneServerGroupTaskId: Option[String])
-
-case class DeepCopyStart(awsResource: ActorRef, options: DeepCopyOptions, targetVpc: Option[Vpc] = None) extends AkkaClustered {
-  val akkaIdentifier: String = options.akkaIdentifier
-}
-case class DeepCopyContinue(awsResource: ActorRef, options: DeepCopyOptions, targetVpc: Option[Vpc] = None) extends AkkaClustered {
-  val akkaIdentifier: String = options.akkaIdentifier
-}
-
-case class GetDeepCopyStatus(id: String) extends AkkaClustered {
-  val akkaIdentifier: String = id
-}
+sealed trait DeepCopyProtocol
 
 object DeepCopyActor {
   type Ref = ActorRef
   val typeName: String = this.getClass.getCanonicalName
+
+  sealed trait DeepCopyComplete extends DeepCopyProtocol
+  case class DeepCopySuccess(options: DeepCopyOptions, newServerGroupName: String) extends DeepCopyComplete
+  case class DeepCopyFailure(options: DeepCopyOptions, message: String) extends DeepCopyComplete
+
+  case class CheckForCreatedResources() extends DeepCopyProtocol
+  case class Requires(awsIdentity: AwsIdentity) extends DeepCopyProtocol
+  case class Found(awsIdentity: AwsIdentity) extends DeepCopyProtocol
+  case class StartServerGroupCloning() extends DeepCopyProtocol
+  case class CloneServerGroupTask(response: CloudDriverResponse) extends DeepCopyProtocol
+  case class DeepCopyStatus(history: List[Any], cloneServerGroupTaskId: Option[String]) extends DeepCopyProtocol
+
+  case class DeepCopyStart(awsResource: ActorRef, options: DeepCopyOptions, targetVpc: Option[Vpc] = None) extends DeepCopyProtocol with AkkaClustered {
+    val akkaIdentifier: String = options.akkaIdentifier
+  }
+  case class DeepCopyContinue(awsResource: ActorRef, options: DeepCopyOptions, targetVpc: Option[Vpc] = None) extends DeepCopyProtocol with AkkaClustered {
+    val akkaIdentifier: String = options.akkaIdentifier
+  }
+
+  case class GetDeepCopyStatus(id: String) extends DeepCopyProtocol with  AkkaClustered {
+    val akkaIdentifier: String = id
+  }
 
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(
