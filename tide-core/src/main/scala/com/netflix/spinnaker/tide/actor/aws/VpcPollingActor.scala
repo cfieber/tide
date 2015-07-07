@@ -21,6 +21,7 @@ import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.VpcPollingActor.GetVpcs
 import com.netflix.spinnaker.tide.api.EddaService
 import scala.concurrent.duration.DurationInt
 
@@ -40,13 +41,14 @@ class VpcPollingActor extends PollingActor {
   }
 }
 
-case class GetVpcs(account: String, region: String) extends AkkaClustered {
-  @JsonIgnore val akkaIdentifier = s"$account.$region"
-}
-
 object VpcPollingActor extends PollingActorObject {
   type Ref = ActorRef
   val props = Props[VpcPollingActor]
+
+  case class GetVpcs(account: String, region: String) extends AkkaClustered {
+    @JsonIgnore val akkaIdentifier = s"$account.$region"
+  }
+
 }
 
 

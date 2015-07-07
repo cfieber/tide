@@ -3,7 +3,7 @@ package com.netflix.spinnaker.tide.actor.aws
 import akka.actor.{Props, ActorRef, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
-import com.netflix.spinnaker.tide.actor.aws.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.PollingActor.{Poll, Start}
 import com.netflix.spinnaker.tide.api.EddaService
 import scala.concurrent.duration.DurationInt
 
@@ -69,9 +69,14 @@ trait PollingActor extends PersistentActor with ActorLogging {
   }
 }
 
-case class Poll()
-case class Start(account: String, region: String, eddaUrlTemplate: String, cloudDriver: CloudDriverActor.Ref) extends AkkaClustered {
-  override val akkaIdentifier: String = s"$account.$region"
+sealed trait PollingProtocol
+
+object PollingActor {
+  case class Poll() extends PollingProtocol
+  case class Start(account: String, region: String, eddaUrlTemplate: String, cloudDriver: CloudDriverActor.Ref)
+    extends PollingProtocol with AkkaClustered {
+    override val akkaIdentifier: String = s"$account.$region"
+  }
 }
 
 trait PollingActorObject {

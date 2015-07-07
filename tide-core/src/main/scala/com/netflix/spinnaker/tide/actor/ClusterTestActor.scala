@@ -20,7 +20,7 @@ import akka.actor._
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.PersistentActor
-import com.netflix.spinnaker.tide.actor.ClusterTestActor.{Messages, GetMessages, NewMessage}
+import com.netflix.spinnaker.tide.actor.ClusterTestActor.{Messages, GetMessages, NewMessage, MessageContent}
 import scala.concurrent.duration.DurationInt
 
 class ClusterTestActor() extends PersistentActor with ActorLogging {
@@ -36,7 +36,7 @@ class ClusterTestActor() extends PersistentActor with ActorLogging {
   override def receiveCommand: Receive = {
     case event: NewMessage =>
       persist(event) { event =>
-        messages = s"${event.message}" :: messages
+        messages = s"${event.messageContent.content}" :: messages
         log.info(s"*** NewMessage: $event")
       }
     case event: GetMessages =>
@@ -50,19 +50,22 @@ class ClusterTestActor() extends PersistentActor with ActorLogging {
   override def receiveRecover: Receive = {
     case event: NewMessage =>
       log.info(s"*** receiveRecover: $event")
-      messages = s"**recovered** ${event.message}" :: messages
+      messages = s"**recovered** ${event.messageContent.content}" :: messages
     case event =>
       log.info(s"*** receiveRecover: $event")
   }
 
 }
 
+sealed trait MessageProtocol
+
 object ClusterTestActor {
   val typeName: String = this.getClass.getCanonicalName
 
-  case class GetMessages(name: String)
-  case class NewMessage(name: String, message: String)
-  case class Messages(name: String, messages: List[String])
+  case class GetMessages(name: String) extends MessageProtocol
+  case class NewMessage(name: String, messageContent: MessageContent, index3: Int = 0) extends MessageProtocol
+  case class Messages(name: String, messages: List[String]) extends MessageProtocol
+  case class MessageContent(content: String, index3: Int = 0)
 
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(
@@ -71,13 +74,13 @@ object ClusterTestActor {
     idExtractor = {
       case msg @ GetMessages(name) =>
         (name, msg)
-      case msg @ NewMessage(name, message) =>
+      case msg @ NewMessage(name, _, _) =>
         (name, msg)
     },
     shardResolver = {
       case GetMessages(name) =>
         name.head.toString
-      case NewMessage(name, _) =>
+      case NewMessage(name, _, _) =>
         name.head.toString
     })
   }

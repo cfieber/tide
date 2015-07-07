@@ -21,6 +21,7 @@ import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.aws.AwsApi.{AwsReference, LoadBalancerIdentity}
+import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
 import com.netflix.spinnaker.tide.api.UpsertLoadBalancerOperation
 import scala.concurrent.duration.DurationInt
 

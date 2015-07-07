@@ -22,6 +22,9 @@ import akka.persistence.{RecoveryCompleted, PersistentActor}
 import akka.util.Timeout
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.AwsResourceReference
+import com.netflix.spinnaker.tide.actor.aws.DeepCopyActor._
+import com.netflix.spinnaker.tide.actor.aws.DeepCopyDirector.{GetAllDeepCopyTasks, DeepCopyOptions}
 import scala.beans.BeanProperty
 import scala.concurrent.duration.DurationInt
 
@@ -89,21 +92,25 @@ class DeepCopyDirector extends PersistentActor with ActorLogging {
   }
 }
 
-case class GetAllDeepCopyTasks()
-case class DeepCopyOptions(source: AwsReference[AutoScalingGroupIdentity], target: Target) extends AkkaClustered {
-  val akkaIdentifier: String = s"DeepCopy.${source.akkaIdentifier}.${target.akkaIdentifier}"
-}
-
-case class Target(@BeanProperty account: String, @BeanProperty region: String, @BeanProperty vpcName: String) extends AkkaClustered {
-  @JsonIgnore def location: AwsLocation = {
-    AwsLocation(account, region)
-  }
-  val akkaIdentifier: String = s"${location.akkaIdentifier}.$vpcName"
-}
+sealed trait DeepCopyDirectorProtocol
 
 object DeepCopyDirector {
   type Ref = ActorRef
   val typeName: String = this.getClass.getCanonicalName
+
+  case class GetAllDeepCopyTasks() extends DeepCopyDirectorProtocol
+  case class DeepCopyOptions(source: AwsReference[AutoScalingGroupIdentity], target: Target)
+    extends DeepCopyDirectorProtocol with AkkaClustered {
+    val akkaIdentifier: String = s"DeepCopy.${source.akkaIdentifier}.${target.akkaIdentifier}"
+  }
+
+  case class Target(@BeanProperty account: String, @BeanProperty region: String, @BeanProperty vpcName: String)
+    extends DeepCopyDirectorProtocol with AkkaClustered {
+    @JsonIgnore def location: AwsLocation = {
+      AwsLocation(account, region)
+    }
+    val akkaIdentifier: String = s"${location.akkaIdentifier}.$vpcName"
+  }
 
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(

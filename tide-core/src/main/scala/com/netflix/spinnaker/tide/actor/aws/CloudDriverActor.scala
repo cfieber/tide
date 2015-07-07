@@ -18,6 +18,8 @@ package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{ActorRef, ActorLogging, Actor}
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, CloneServerGroup, UpsertLoadBalancer, UpsertSecurityGroup}
+import com.netflix.spinnaker.tide.actor.aws.CloudDriverActor.{GetTaskDetail, CloudDriverResponse}
 import com.netflix.spinnaker.tide.api.CloudDriverService.TaskDetail
 import com.netflix.spinnaker.tide.api._
 
@@ -44,10 +46,12 @@ class CloudDriverActor(private val cloudDriverService: CloudDriverService) exten
   }
 }
 
-case class CloudDriverResponse(taskDetail: TaskDetail, cloudDriverReference: CloudDriverActor.Ref)
-case class GetTaskDetail(id: String)
+sealed trait CloudDriverProtocol
 
 object CloudDriverActor {
   type Ref = ActorRef
+
+  case class CloudDriverResponse(taskDetail: TaskDetail, cloudDriverReference: CloudDriverActor.Ref) extends CloudDriverProtocol
+  case class GetTaskDetail(id: String) extends CloudDriverProtocol
 
 }

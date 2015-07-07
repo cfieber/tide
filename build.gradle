@@ -78,6 +78,7 @@ allprojects {
     compile "com.fasterxml.jackson.module:jackson-module-scala_$versions.scala:2.5.2"
     compile "com.squareup.okhttp:okhttp:2.4.0"
     compile 'com.netflix.frigga:frigga:0.13'
+    compile "com.github.romix.akka:akka-kryo-serialization_$versions.scala:0.3.3"
 
     testCompile "org.scala-lang.modules:scala-xml_$versions.scala:1.0.1"
     testCompile "org.scalatest:scalatest_$versions.scala:$versions.scalaTest"

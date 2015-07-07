@@ -20,6 +20,7 @@ import akka.actor.{Props, ActorRef, ActorLogging, Actor}
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, ServerGroupLatestState}
 import com.netflix.spinnaker.tide.api.EddaService
 import scala.concurrent.duration.DurationInt
 

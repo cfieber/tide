@@ -18,6 +18,7 @@ package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{Props, ActorRef}
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
+import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, LoadBalancerLatestState}
 
 class LoadBalancerPollingActor extends PollingActor {
 

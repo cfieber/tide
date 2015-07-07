@@ -21,10 +21,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 
 object AwsApi {
 
-  trait AkkaClustered {
-    val akkaIdentifier: String
-  }
-
   case class AwsLocation(account: String, region: String) extends AkkaClustered {
     @JsonIgnore val akkaIdentifier = s"$account.$region"
   }
