@@ -22,7 +22,7 @@ import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.Target
 import com.netflix.spinnaker.tide.actor.aws._
-import com.netflix.spinnaker.tide.api.CloudDriverService.TaskDetail
+import com.wordnik.swagger.annotations.{ApiOperation, Api}
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RequestMethod._
 import org.springframework.web.bind.annotation._
@@ -30,19 +30,16 @@ import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 import akka.pattern.ask
 
+@Api(value = "/resource", description = "Operations on cloud resources")
+@RequestMapping(value = Array("/resource"))
 @RestController
-class AwsResourceController @Autowired()(private val system: ActorSystem,
-                                           private val clusterSharding: ClusterSharding,
+class AwsResourceController @Autowired()(private val clusterSharding: ClusterSharding,
                                            private val awsResource: AwsResourceActor.Ref) {
 
   implicit val timeout = Timeout(5 seconds)
 
   def deepCopyDirector: ActorRef = {
     clusterSharding.shardRegion(DeepCopyDirector.typeName)
-  }
-
-  def vpcCluster: ActorRef = {
-    clusterSharding.shardRegion(VpcPollingActor.typeName)
   }
 
   @RequestMapping(value = Array("/securityGroup/{account}/{region}/{name}"), method = Array(GET))
@@ -122,27 +119,17 @@ class AwsResourceController @Autowired()(private val system: ActorSystem,
     cloudDriverResponse.taskDetail
   }
 
+  @ApiOperation(value = "Copies the server group to the target along with dependencies.",
+    notes = "Cloud resource dependencies will be copied as well if they do not exist (security groups, load balancers, scaling policies). Returns the task id.")
   @RequestMapping(value = Array("/serverGroup/{account}/{region}/{name}/deepCopy"), method = Array(POST))
   def deepCopyServerGroup(@PathVariable("account") account: String,
                               @PathVariable("region") region: String,
                               @PathVariable("name") name: String,
                               @RequestBody target: Target) = {
-        val reference = AwsReference(AwsLocation(account, region), AutoScalingGroupIdentity(name))
-        val deepCopyOptions = DeepCopyOptions(reference, target)
-        deepCopyDirector ! deepCopyOptions
-        deepCopyOptions.akkaIdentifier
-  }
-
-  @RequestMapping(value = Array("/serverGroup/copy/task/{id}"), method = Array(GET))
-  def copySecurityGroupTask(@PathVariable("id") id: String): DeepCopyStatus = {
-    val future = (deepCopyDirector ? GetDeepCopyStatus(id)).mapTo[DeepCopyStatus]
-    Await.result(future, timeout.duration)
-  }
-
-  @RequestMapping(value = Array("/serverGroup/copy/task"), method = Array(GET))
-  def copySecurityGroupTasks(): Set[String] = {
-    val future = (deepCopyDirector ? GetAllDeepCopyTasks()).mapTo[Set[String]]
-    Await.result(future, timeout.duration)
+    val reference = AwsReference(AwsLocation(account, region), AutoScalingGroupIdentity(name))
+    val deepCopyOptions = DeepCopyOptions(reference, target)
+    deepCopyDirector ! deepCopyOptions
+    s"${deepCopyOptions.akkaIdentifier}."
   }
 
 }

@@ -33,7 +33,7 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
   implicit val timeout = Timeout(5 seconds)
   private implicit val dispatcher = context.dispatcher
   def scheduler = context.system.scheduler
-  private val checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckForCreatedResources())
+  private var checkForCreatedResources: Cancellable = _
   override def postStop(): Unit = checkForCreatedResources.cancel()
 
   var awsResource: ActorRef = _
@@ -52,7 +52,6 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
 
   var serverGroupState: Option[ServerGroupLatestState] = None
 
-  var allEvents: List[Any] = Nil
   var history: List[Any] = Nil
   var resourcesRequired: Set[AwsIdentity] = Set()
   var resourcesFound: Set[AwsIdentity] = Set()
@@ -83,7 +82,7 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
       sender ! DeepCopyStatus(history, cloneServerGroupTaskId)
 
     case event: DeepCopyStart =>
-      allEvents = event.getClass.getSimpleName :: allEvents
+      checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckForCreatedResources())
       val target = event.options.target
       val vpcOption = getVpcByName(target.vpcName, target.location)
       persist(event.copy(targetVpc = vpcOption)) { e =>
@@ -98,7 +97,7 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case event: DeepCopyContinue =>
-      allEvents = event.getClass.getSimpleName :: allEvents
+      checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckForCreatedResources())
       awsResource = event.awsResource
       awsResource ! AwsResourceProtocol(sourceReference, GetServerGroup(), None)
 
@@ -126,7 +125,6 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case event: Requires =>
-      allEvents = (event.getClass.getSimpleName, event.awsIdentity) :: allEvents
       if (!resourcesRequired.contains(event.awsIdentity)) {
         persist(event) { e =>
           updateState(e)
@@ -141,7 +139,6 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case event: Found =>
-      allEvents = (event.getClass.getSimpleName, event.awsIdentity) :: allEvents
       if (!resourcesFound.contains(event.awsIdentity)) {
         persist(event) { e =>
           updateState(e)
@@ -152,7 +149,6 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case event: ServerGroupDetails =>
-      allEvents = (event.getClass.getSimpleName, event.awsReference) :: allEvents
       event.latestState.foreach { latestState =>
         sourceVpcId = latestState.autoScalingGroup.vpcId
         serverGroupState = Option(latestState)
@@ -166,7 +162,6 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case event: StartServerGroupCloning =>
-      allEvents = event.getClass.getSimpleName :: allEvents
       if (!cloneServerGroupTaskId.isDefined) {
         persist(event) { e =>
           updateState(e)
@@ -186,13 +181,11 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case event: CloneServerGroupTask =>
-      allEvents = (event.getClass.getSimpleName, event.response.taskDetail.id) :: allEvents
       persist(event) { e =>
         updateState(e)
       }
 
     case event: LoadBalancerDetails =>
-      allEvents = (event.getClass.getSimpleName, event.awsReference) :: allEvents
       val name = event.awsReference.identity.loadBalancerName
       event.latestState match {
         case None =>
@@ -216,7 +209,6 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case event: SecurityGroupDetails =>
-      allEvents = (event.getClass.getSimpleName, event.awsReference) :: allEvents
       val name = event.awsReference.identity.groupName
       val Source = VpcLocation(sourceReference.location, sourceVpcId)
       val Target = VpcLocation(target.location, targetVpc.map(_.vpcId))
@@ -247,7 +239,6 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case event: CloudDriverResponse =>
-      allEvents = (event.getClass.getSimpleName, event.taskDetail.id) :: allEvents
         updateState(event)
         cloneServerGroupTaskId.foreach { id =>
           if (event.taskDetail.id == id) {
@@ -275,9 +266,7 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
   }
 
   def startServerGroupCloning() = {
-    allEvents = ("testStartServerGroupCloning", resourcesRequired.diff(resourcesFound)) :: allEvents
     if (resourcesRequired.diff(resourcesFound).isEmpty) {
-      allEvents = ("startServerGroupCloning", resourcesRequired.diff(resourcesFound), cloneServerGroupTaskId) :: allEvents
       self ! StartServerGroupCloning()
     }
   }
@@ -293,6 +282,7 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
         resourcesFound = Set()
         loadBalancerNameTargetToSource = Map()
         cloneServerGroupTaskId = None
+        isComplete = false
         history = s"Start deep copy of ${sourceReference.akkaIdentifier}" :: history
       case event: DeepCopyFailure =>
         isComplete = true

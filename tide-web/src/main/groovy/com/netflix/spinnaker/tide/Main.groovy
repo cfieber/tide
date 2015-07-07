@@ -26,7 +26,7 @@ import org.springframework.context.annotation.Configuration
 
 //@Import(JacksonConfig)
 @Configuration
-@ComponentScan(["com.netflix.spinnaker.tide"])
+@ComponentScan(["com.netflix.spinnaker.tide", "com.netflix.spinnaker.config"])
 @EnableAutoConfiguration(exclude = [GroovyTemplateAutoConfiguration])
 class Main extends SpringBootServletInitializer {
   static final Map<String, String> DEFAULT_PROPS = [

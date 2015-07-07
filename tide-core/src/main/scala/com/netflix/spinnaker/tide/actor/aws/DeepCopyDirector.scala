@@ -22,6 +22,7 @@ import akka.persistence.{RecoveryCompleted, PersistentActor}
 import akka.util.Timeout
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
+import scala.beans.BeanProperty
 import scala.concurrent.duration.DurationInt
 
 class DeepCopyDirector extends PersistentActor with ActorLogging {
@@ -92,7 +93,8 @@ case class GetAllDeepCopyTasks()
 case class DeepCopyOptions(source: AwsReference[AutoScalingGroupIdentity], target: Target) extends AkkaClustered {
   val akkaIdentifier: String = s"DeepCopy.${source.akkaIdentifier}.${target.akkaIdentifier}"
 }
-case class Target(account: String, region: String, vpcName: String) extends AkkaClustered {
+
+case class Target(@BeanProperty account: String, @BeanProperty region: String, @BeanProperty vpcName: String) extends AkkaClustered {
   @JsonIgnore def location: AwsLocation = {
     AwsLocation(account, region)
   }

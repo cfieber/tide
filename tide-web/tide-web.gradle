@@ -36,6 +36,7 @@ dependencies {
   compile spinnaker.dependency("groovy")
   spinnaker.group("bootWeb")
   spinnaker.group('test')
+  compile spinnaker.dependency("korkSwagger")
 }
 
 applicationDistribution.from(project.file('config')) {

@@ -116,8 +116,6 @@ object AwsApi {
 
   case class SuspendedProcess(processName: String, suspensionReason: String)
 
-  case class ServerGroup(autoScalingGroup: AutoScalingGroup, launchConfiguration: LaunchConfiguration)
-
   case class Subnet(subnetId: String, vpcId: String,
                     availabilityZone: String, availableIpAddressCount: Int, cidrBlock: String, defaultForAz: Boolean,
                     mapPublicIpOnLaunch: Boolean, state: String, tags: List[Tag]) {
