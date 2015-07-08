@@ -18,48 +18,45 @@ package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{ActorRef, ActorLogging, Actor}
 import akka.contrib.pattern.ClusterSharding
-import com.fasterxml.jackson.annotation.JsonIgnore
+import com.fasterxml.jackson.annotation.{JsonUnwrapped, JsonIgnore}
 import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
+import com.netflix.spinnaker.tide.actor.PipelineActor
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
+import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor._
+import com.netflix.spinnaker.tide.api.{Pipeline, PipelineState}
 import scala.concurrent.duration.DurationInt
 
-class AwsResourceActor(private val cloudDriver: CloudDriverActor.Ref) extends Actor with ActorLogging {
+class ResourceEventRoutingActor(private val cloudDriver: CloudDriverActor.Ref, private val front50: Front50Actor.Ref) extends Actor with ActorLogging {
 
-  def securityGroupCluster: ActorRef = {
-    ClusterSharding.get(context.system).shardRegion(SecurityGroupActor.typeName)
-  }
-
-  def loadBalancerCluster: ActorRef = {
-    ClusterSharding.get(context.system).shardRegion(LoadBalancerActor.typeName)
-  }
-
-  def serverGroupCluster: ActorRef = {
-    ClusterSharding.get(context.system).shardRegion(ServerGroupActor.typeName)
-  }
-
-  def deepCopyDirector: ActorRef = {
-    ClusterSharding.get(context.system).shardRegion(TaskDirector.typeName)
+  def getShardCluster(name: String): ActorRef = {
+    ClusterSharding.get(context.system).shardRegion(name)
   }
 
   private implicit val dispatcher = context.dispatcher
   def scheduler = context.system.scheduler
-  private val scheduledSendingReference = scheduler.schedule(0 seconds, 15 seconds, deepCopyDirector, AwsResourceReference(self))
+  private val scheduledSendingReference = scheduler.schedule(0 seconds, 15 seconds,
+    getShardCluster(TaskDirector.typeName), AwsResourceReference(self))
 
   override def postStop(): Unit = scheduledSendingReference.cancel()
 
   override def receive: Receive = {
     case msg @ AwsResourceProtocol(_, event: SecurityGroupEvent, _) =>
-      securityGroupCluster forward msg.copy(cloudDriver = Option(cloudDriver))
+      getShardCluster(SecurityGroupActor.typeName) forward msg.copy(cloudDriver = Option(cloudDriver))
 
     case msg @ AwsResourceProtocol(_, event: LoadBalancerEvent, _) =>
-      loadBalancerCluster forward msg.copy(cloudDriver = Option(cloudDriver))
+      getShardCluster(LoadBalancerActor.typeName) forward msg.copy(cloudDriver = Option(cloudDriver))
 
     case msg @ AwsResourceProtocol(_, event: CloneServerGroup, _) =>
       cloudDriver forward msg
 
     case msg @ AwsResourceProtocol(_, event: ServerGroupEvent, _) =>
-      serverGroupCluster forward msg.copy(cloudDriver = Option(cloudDriver))
+      getShardCluster(ServerGroupActor.typeName) forward msg.copy(cloudDriver = Option(cloudDriver))
+
+    case msg: InsertPipeline =>
+      front50 forward msg
+
+    case msg: PipelineEvent =>
+      getShardCluster(PipelineActor.typeName) forward msg
   }
 }
 
@@ -73,23 +70,23 @@ case class ClusterName(appName: String, stack: String, detail: String) {
   }
 }
 
-sealed trait AwsResourceEvent extends Serializable
-sealed trait SecurityGroupEvent extends AwsResourceEvent
-sealed trait LoadBalancerEvent extends AwsResourceEvent
-sealed trait ServerGroupEvent extends AwsResourceEvent
+sealed trait ResourceEvent extends Serializable
+sealed trait SecurityGroupEvent extends ResourceEvent
+sealed trait LoadBalancerEvent extends ResourceEvent
+sealed trait ServerGroupEvent extends ResourceEvent
 
-object AwsResourceActor {
+object ResourceEventRoutingActor {
   type Ref = ActorRef
 
-  case class LatestStateTimeout() extends AwsResourceEvent
-  case class ClearLatestState() extends AwsResourceEvent
-  case class ClearDesiredState() extends AwsResourceEvent
-  case class MutateState() extends AwsResourceEvent
+  case class LatestStateTimeout() extends ResourceEvent
+  case class ClearLatestState() extends ResourceEvent
+  case class ClearDesiredState() extends ResourceEvent
+  case class MutateState() extends ResourceEvent
 
-  case class AwsResourceReference(awsResource: AwsResourceActor.Ref) extends AwsResourceEvent
+  case class AwsResourceReference(awsResource: ResourceEventRoutingActor.Ref) extends ResourceEvent
 
-  case class AwsResourceProtocol[T <: AwsIdentity](awsReference: AwsReference[T], event: AwsResourceEvent,
-                                                   cloudDriver: Option[ActorRef] = None) extends AkkaClustered with AwsResourceEvent {
+  case class AwsResourceProtocol[T <: AwsIdentity](awsReference: AwsReference[T], event: ResourceEvent,
+                                                   cloudDriver: Option[ActorRef] = None) extends AkkaClustered with ResourceEvent {
     @JsonIgnore val akkaIdentifier = s"${awsReference.akkaIdentifier}"
   }
 
@@ -115,5 +112,10 @@ object AwsResourceActor {
                                     launchConfiguration: LaunchConfigurationState) extends ServerGroupEvent
   case class ServerGroupDetails(awsReference: AwsReference[ServerGroupIdentity],
                                 latestState: Option[ServerGroupLatestState]) extends ServerGroupEvent
+
+  sealed trait PipelineEvent extends ResourceEvent
+  case class GetPipeline(id: String) extends PipelineEvent
+  case class PipelineDetails(id: String, state: Option[PipelineState]) extends PipelineEvent
+  case class InsertPipeline(state: PipelineState) extends PipelineEvent
 }
 

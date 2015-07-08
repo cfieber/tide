@@ -128,6 +128,18 @@ object AwsApi {
     }
   }
 
+  def getVpcNameFromSubnetType(subnetTypeOption: Option[String]): Option[String] = {
+    subnetTypeOption match {
+        case Some(subnetType) =>
+          val pattern = """(.*) \((\.+)\)""".r
+          pattern.findFirstMatchIn(subnetType) match {
+            case Some(m) if m.groupCount == 2 => Option(m.group(2))
+            case _ => Option("Main")
+          }
+        case None => None
+      }
+  }
+
   def normalizeSecurityGroupNames(securityGroups: Set[String], securityGroupIdToName: Map[String, SecurityGroupIdentity]): Set[String] = {
     securityGroups.map { securityGroupName =>
       if (securityGroupName.startsWith("sg-")) {

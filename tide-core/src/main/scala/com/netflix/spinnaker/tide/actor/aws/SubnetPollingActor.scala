@@ -6,7 +6,7 @@ import com.netflix.spinnaker.tide.actor.aws.AwsApi.Subnet
 import com.netflix.spinnaker.tide.actor.aws.PollingActor.PollingClustered
 import com.netflix.spinnaker.tide.actor.aws.SubnetPollingActor.GetSubnets
 
-class SubnetPollingActor extends PollingActor {
+class SubnetPollingActor extends EddaPollingActor {
 
   var subnets: List[Subnet] = _
 

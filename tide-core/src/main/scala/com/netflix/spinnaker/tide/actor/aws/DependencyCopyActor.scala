@@ -5,7 +5,7 @@ import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
+import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor._
 import com.netflix.spinnaker.tide.actor.aws.DependencyCopyActor._
 import com.netflix.spinnaker.tide.actor.aws.TaskActor._
 import com.netflix.spinnaker.tide.actor.aws.TaskDirector._
@@ -65,12 +65,12 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     case event @ ExecuteTask(_, _, task: DependencyCopyTask, _) =>
       persist(event) { e =>
         updateState(e)
-        checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckCompletion())
         val future = (getShardCluster(VpcPollingActor.typeName) ? GetVpcs(task.target.location.account, task.target.location.region)).mapTo[List[Vpc]]
         val vpcs = Await.result(future, timeout.duration)
         val sourceVpc = vpcs.find(_.name == task.source.vpcName).map(_.vpcId)
         val targetVpc = vpcs.find(_.name == task.target.vpcName).map(_.vpcId)
         self ! VpcIds(sourceVpc, targetVpc)
+        checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckCompletion())
         task.requiredSecurityGroupNames.foreach(it => self ! Requires(SecurityGroupIdentity(it)))
         task.sourceLoadBalancerNames.foreach(it => self ! Requires(LoadBalancerIdentity(it)))
       }
@@ -106,6 +106,12 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
           updateState(e)
           sendTaskEvent(Log(taskId, s"Requires ${targetIdentity.akkaIdentifier}"))
           checkForCreatedTargetResource(e.awsIdentity)
+          event.awsIdentity match {
+            case sourceSecurityGroupIdentity: SecurityGroupIdentity =>
+              awsResource ! AwsResourceProtocol(AwsReference(task.source.location,
+                sourceSecurityGroupIdentity.copy(vpcId = vpcIds.source)), GetSecurityGroup(), None)
+            case _ =>
+          }
         }
       }
 
@@ -113,9 +119,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       if (!resourcesFound.contains(event.awsIdentity)) {
         persist(event) { e =>
           updateState(e)
-          if (!task.dryRun) {
-            sendTaskEvent(Log(taskId, s"Found ${e.awsIdentity.akkaIdentifier}"))
-          }
+          sendTaskEvent(Log(taskId, s"Found ${e.awsIdentity.akkaIdentifier}"))
           checkCompletion()
         }
       }
@@ -129,6 +133,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
           event.latestState match {
             case None =>
               val sourceSecurityGroupName = securityGroupNameTargetToSource(name)
+              sendTaskEvent(CreateAwsResource(taskId, event.awsReference))
               awsResource ! AwsResourceProtocol(AwsReference(task.source.location,
                 SecurityGroupIdentity(sourceSecurityGroupName, vpcIds.source)), GetSecurityGroup(), None)
             case Some(latestState) =>
@@ -147,7 +152,6 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               }
               val targetSecurityGroupIdentity = transformToTargetIdentity(event.awsReference.identity)
               val referenceToUpsert = AwsReference(task.target.location, targetSecurityGroupIdentity)
-              sendTaskEvent(Create(taskId, referenceToUpsert))
               if (task.dryRun) {
                 self ! Found(targetSecurityGroupIdentity)
               } else {
@@ -159,6 +163,8 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
                 awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
               }
           }
+        case other =>
+          Nil
       }
 
     case event: LoadBalancerDetails =>
@@ -181,7 +187,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               latestState.state.securityGroups.foreach(it => self ! Requires(SecurityGroupIdentity(it)))
               val targetLoadBalancerIdentity = transformToTargetIdentity(identity)
               val referenceToUpsert = AwsReference(task.target.location, targetLoadBalancerIdentity)
-              sendTaskEvent(Create(taskId, referenceToUpsert))
+              sendTaskEvent(CreateAwsResource(taskId, referenceToUpsert))
               if (task.dryRun) {
                 self ! Found(targetLoadBalancerIdentity)
               } else {
@@ -247,18 +253,24 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   }
 
   def checkCompletion() = {
+    val identifiedTargetNames: Set[String] = securityGroupNameToTargetId.keySet
+    val identifiedTargetNamesFromSource: Set[String] = securityGroupNameToSourceId.keySet.map { name =>
+      transformToTargetIdentity(SecurityGroupIdentity(name)).groupName
+    }
     val missingDependencies = resourcesRequired.diff(resourcesFound)
-    if (missingDependencies.isEmpty) {
-      val securityGroupIdsSourceToTarget: Map[String, String] = if (task.dryRun) {
-        Map()
-      } else {
-        securityGroupNameToSourceId.keySet.map { name =>
-          name -> securityGroupNameToTargetId(name)
-        }.toMap
-      }
+    if (missingDependencies.isEmpty && identifiedTargetNames == identifiedTargetNamesFromSource) {
+      val securityGroupIdsSourceToTarget: Map[String, String] = securityGroupNameToTargetId.keySet.map { targetName =>
+        val sourceName = securityGroupNameTargetToSource(targetName)
+        securityGroupNameToSourceId(sourceName) -> securityGroupNameToTargetId(targetName)
+      }.toMap
       self ! TaskSuccess(taskId, task, DependencyCopyTaskResult(securityGroupIdsSourceToTarget))
     } else {
       missingDependencies.foreach(checkForCreatedTargetResource)
+      securityGroupNameTargetToSource.foreach {
+        case (targetName, sourceName) =>
+          awsResource ! AwsResourceProtocol(AwsReference(task.source.location, SecurityGroupIdentity(sourceName, vpcIds.source)), GetSecurityGroup(), None)
+          awsResource ! AwsResourceProtocol(AwsReference(task.target.location, SecurityGroupIdentity(targetName, vpcIds.target)), GetSecurityGroup(), None)
+      }
     }
   }
 

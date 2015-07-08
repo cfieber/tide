@@ -21,15 +21,20 @@ import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.SerializationFeature._
 import com.fasterxml.jackson.datatype.jsr310.JSR310Module
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import com.netflix.spinnaker.tide.api.EddaService
+import com.netflix.spinnaker.tide.api.{Front50Service, EddaService}
 import retrofit.Endpoints._
 import retrofit.RestAdapter.{LogLevel, Builder}
 import retrofit.client.OkClient
 import retrofit.converter.JacksonConverter
 
-class EddaServiceBuilder {
+class ServiceBuilder {
 
   def constructEddaService(account: String, region: String, eddaUrlTemplate: String): EddaService = {
+    val eddaUrl = eddaUrlTemplate.replaceAll("%account", account).replaceAll("%region", region)
+    constructService(eddaUrl, classOf[EddaService])
+  }
+
+  private def constructService[T](url: String, serviceType: Class[T]): T = {
     val objectMapper: ObjectMapper = new ObjectMapper()
     objectMapper.registerModule(DefaultScalaModule)
       .registerModule(new JSR310Module)
@@ -37,13 +42,12 @@ class EddaServiceBuilder {
       .enable(ACCEPT_SINGLE_VALUE_AS_ARRAY)
       .enable(ACCEPT_EMPTY_STRING_AS_NULL_OBJECT)
       .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
-    val eddaUrl = eddaUrlTemplate.replaceAll("%account", account).replaceAll("%region", region)
-    val endpoint = newFixedEndpoint(eddaUrl)
+    val endpoint = newFixedEndpoint(url)
     new Builder().
       setEndpoint(endpoint).
       setClient(new OkClient).
       setConverter(new JacksonConverter(objectMapper)).
       setLogLevel(LogLevel.BASIC).
-      build.create(classOf[EddaService])
+      build.create(serviceType)
   }
 }

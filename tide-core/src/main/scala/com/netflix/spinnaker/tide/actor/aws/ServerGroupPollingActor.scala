@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide.actor.aws
 import akka.actor.{Props, ActorRef}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, ServerGroupLatestState}
+import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor.{AwsResourceProtocol, ServerGroupLatestState}
 import com.netflix.spinnaker.tide.actor.aws.SecurityGroupPollingActor.GetSecurityGroupIdToNameMappings
 import com.netflix.spinnaker.tide.actor.aws.SubnetPollingActor.GetSubnets
 import com.netflix.spinnaker.tide.actor.aws.VpcPollingActor.GetVpcs
@@ -28,7 +28,7 @@ import scala.concurrent.duration.DurationInt
 import scala.concurrent.Await
 
 
-class ServerGroupPollingActor extends PollingActor {
+class ServerGroupPollingActor extends EddaPollingActor {
   implicit val timeout = Timeout(5 seconds)
 
   override def poll() = {
@@ -51,7 +51,7 @@ class ServerGroupPollingActor extends PollingActor {
           val normalizedLaunchConfigurationState = launchConfiguration.state.convertToSecurityGroupNames(securityGroupIdToName)
           var normalizedAutoScalingGroupState = autoScalingGroup.state.populateVpcAttributes(vpcs, subnets)
           val latestState = ServerGroupLatestState(normalizedAutoScalingGroupState, normalizedLaunchConfigurationState)
-          resourceCluster(ServerGroupActor.typeName) ! AwsResourceProtocol(AwsReference(AwsLocation(account, region), autoScalingGroup.identity),
+          getShardCluster(ServerGroupActor.typeName) ! AwsResourceProtocol(AwsReference(AwsLocation(account, region), autoScalingGroup.identity),
             latestState, Option(cloudDriver))
         }
       }

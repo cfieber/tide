@@ -19,11 +19,11 @@ package com.netflix.spinnaker.tide.actor.aws
 import akka.actor._
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, SecurityGroupLatestState}
+import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor.{AwsResourceProtocol, SecurityGroupLatestState}
 import com.netflix.spinnaker.tide.actor.aws.PollingActor.PollingClustered
 import com.netflix.spinnaker.tide.actor.aws.SecurityGroupPollingActor.GetSecurityGroupIdToNameMappings
 
-class SecurityGroupPollingActor extends PollingActor {
+class SecurityGroupPollingActor extends EddaPollingActor {
 
   var securityGroupIdToName: Map[String, SecurityGroupIdentity] = Map()
 
@@ -44,7 +44,7 @@ class SecurityGroupPollingActor extends PollingActor {
       val normalizedState = securityGroup.state.ensureSecurityGroupNameOnIngressRules(securityGroupIdToName)
       val latestState = SecurityGroupLatestState(securityGroup.groupId, normalizedState)
       val reference = AwsReference(AwsLocation(account, region), securityGroup.identity)
-      resourceCluster(SecurityGroupActor.typeName) ! AwsResourceProtocol(reference, latestState, Option(cloudDriver))
+      getShardCluster(SecurityGroupActor.typeName) ! AwsResourceProtocol(reference, latestState, Option(cloudDriver))
     }
   }
 }

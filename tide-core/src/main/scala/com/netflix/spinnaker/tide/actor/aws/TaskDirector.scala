@@ -21,9 +21,9 @@ import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.AwsResourceReference
+import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor.AwsResourceReference
 import com.netflix.spinnaker.tide.actor.aws.DependencyCopyActor.DependencyCopyTask
-import com.netflix.spinnaker.tide.actor.aws.ServerGroupCloneActor.ServerGroupDeepCopyTask
+import com.netflix.spinnaker.tide.actor.aws.ServerGroupDeepCopyActor.ServerGroupDeepCopyTask
 import com.netflix.spinnaker.tide.actor.aws.TaskActor._
 import com.netflix.spinnaker.tide.actor.aws.TaskDirector._
 import com.netflix.spinnaker.tide.actor.aws.TaskDirector.typeName
@@ -35,7 +35,7 @@ class TaskDirector extends PersistentActor with ActorLogging {
 
   implicit val timeout = Timeout(5 seconds)
 
-  var awsResource: AwsResourceActor.Ref = _
+  var awsResource: ResourceEventRoutingActor.Ref = _
 
   var currentExecutionsByTaskId: Map[String, ExecuteTask] = Map()
 

@@ -18,8 +18,8 @@ package com.netflix.spinnaker.tide.actor
 
 import akka.actor.ActorSystem
 import com.netflix.akka.spring.{ActorFactory, AkkaConfiguration}
-import com.netflix.spinnaker.tide.actor.aws.{AwsResourceActor, CloudDriverActor}
-import com.netflix.spinnaker.tide.api.CloudDriverService
+import com.netflix.spinnaker.tide.actor.aws.{PipelinePollingActor, Front50Actor, CloudDriverActor, ResourceEventRoutingActor}
+import com.netflix.spinnaker.tide.api.{Front50Service, CloudDriverService}
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.config.ConfigurableBeanFactory.SCOPE_PROTOTYPE
 import org.springframework.context.annotation.{Scope => BeanScope, _}
@@ -31,6 +31,7 @@ class ActorConfiguration {
   @Autowired var system: ActorSystem = _
   @Autowired var actorFactory: ActorFactory = _
   @Autowired var cloudDriverService: CloudDriverService = _
+  @Autowired var front50Service: Front50Service = _
 
   @Bean
   @BeanScope(SCOPE_PROTOTYPE)
@@ -42,13 +43,13 @@ class ActorConfiguration {
 
   @Bean
   @BeanScope(SCOPE_PROTOTYPE)
-  def awsResourceActor: AwsResourceActor = {
-    new AwsResourceActor(cloudDriver)
+  def awsResourceActor: ResourceEventRoutingActor = {
+    new ResourceEventRoutingActor(cloudDriver, front50)
   }
 
   @Bean
-  def awsResource: AwsResourceActor.Ref =
-    actorFactory.create(system, classOf[AwsResourceActor])
+  def resourceEventRouter: ResourceEventRoutingActor.Ref =
+    actorFactory.create(system, classOf[ResourceEventRoutingActor])
 
   @Bean
   @BeanScope(SCOPE_PROTOTYPE)
@@ -59,5 +60,15 @@ class ActorConfiguration {
   @Bean
   def cloudDriver: CloudDriverActor.Ref =
     actorFactory.create(system, classOf[CloudDriverActor])
+
+  @Bean
+  @BeanScope(SCOPE_PROTOTYPE)
+  def front50Actor: Front50Actor = {
+    new Front50Actor(front50Service)
+  }
+
+  @Bean
+  def front50: Front50Actor.Ref =
+    actorFactory.create(system, classOf[Front50Actor])
 
 }

@@ -38,4 +38,6 @@ object WebModel {
     }
   }
 
+  case class PipelineVpcMigrateDefinition(@BeanProperty sourceVpcName: Option[String], @BeanProperty targetVpcName: String)
+
 }
