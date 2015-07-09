@@ -40,7 +40,7 @@ class AwsResourceActor(private val cloudDriver: CloudDriverActor.Ref) extends Ac
   }
 
   def deepCopyDirector: ActorRef = {
-    ClusterSharding.get(context.system).shardRegion(DeepCopyDirector.typeName)
+    ClusterSharding.get(context.system).shardRegion(TaskDirector.typeName)
   }
 
   private implicit val dispatcher = context.dispatcher

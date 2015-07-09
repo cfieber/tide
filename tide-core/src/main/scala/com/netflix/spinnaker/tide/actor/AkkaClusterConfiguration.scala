@@ -44,7 +44,8 @@ class AkkaClusterConfiguration {
     VpcPollingActor.startCluster(clusterSharding)
 
     DeepCopyActor.startCluster(clusterSharding)
-    DeepCopyDirector.startCluster(clusterSharding)
+    TaskDirector.startCluster(clusterSharding)
+    TaskActor.startCluster(clusterSharding)
   }
 
   @Bean

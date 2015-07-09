@@ -22,7 +22,7 @@ import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
 import com.netflix.spinnaker.tide.actor.aws.CloudDriverActor.CloudDriverResponse
-import com.netflix.spinnaker.tide.actor.aws.DeepCopyDirector.{DeepCopyOptions, Target}
+import com.netflix.spinnaker.tide.actor.aws.TaskDirector.{DeepCopyTask, Target}
 import com.netflix.spinnaker.tide.actor.aws._
 import com.wordnik.swagger.annotations.{ApiOperation, Api}
 import org.springframework.beans.factory.annotation.Autowired
@@ -41,7 +41,7 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
   implicit val timeout = Timeout(5 seconds)
 
   def deepCopyDirector: ActorRef = {
-    clusterSharding.shardRegion(DeepCopyDirector.typeName)
+    clusterSharding.shardRegion(TaskDirector.typeName)
   }
 
   @RequestMapping(value = Array("/securityGroup/{account}/{region}/{name}"), method = Array(GET))
@@ -129,7 +129,7 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
                               @PathVariable("name") name: String,
                               @RequestBody target: Target) = {
     val reference = AwsReference(AwsLocation(account, region), AutoScalingGroupIdentity(name))
-    val deepCopyOptions = DeepCopyOptions(reference, target)
+    val deepCopyOptions = DeepCopyTask(reference, target)
     deepCopyDirector ! deepCopyOptions
     s"${deepCopyOptions.akkaIdentifier}."
   }

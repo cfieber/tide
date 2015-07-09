@@ -23,12 +23,12 @@ import akka.util.Timeout
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.AwsResourceReference
-import com.netflix.spinnaker.tide.actor.aws.DeepCopyActor._
-import com.netflix.spinnaker.tide.actor.aws.DeepCopyDirector.{GetAllDeepCopyTasks, DeepCopyOptions}
+import com.netflix.spinnaker.tide.actor.aws.TaskActor.GetTask
+import com.netflix.spinnaker.tide.actor.aws.TaskDirector._
 import scala.beans.BeanProperty
 import scala.concurrent.duration.DurationInt
 
-class DeepCopyDirector extends PersistentActor with ActorLogging {
+class TaskDirector extends PersistentActor with ActorLogging {
 
   override def persistenceId: String = self.path.name
 
@@ -36,39 +36,45 @@ class DeepCopyDirector extends PersistentActor with ActorLogging {
 
   var awsResource: AwsResourceActor.Ref = _
 
-  var currentDeepCopiesById: Map[String, DeepCopyOptions] = Map()
+  var currentTasksById: Map[String, TaskDescription] = Map()
+
+  var nextTaskId: Long = 1
 
   def deepCopyCluster: ActorRef = {
     ClusterSharding.get(context.system).shardRegion(DeepCopyActor.typeName)
   }
 
+  def taskCluster: ActorRef = {
+    ClusterSharding.get(context.system).shardRegion(TaskActor.typeName)
+  }
+
   override def receiveCommand: Receive = {
     case event: AwsResourceReference =>
       awsResource = event.awsResource
-      context become directDeepCopies
-      currentDeepCopiesById.foreach {
-        case (id, options) => deepCopyCluster ! DeepCopyContinue(awsResource, options)
+      context become directTasks
+      currentTasksById.foreach {
+        case (id, task) => routeTask(task, isContinued = true, id)
       }
     case event => Nil
   }
 
-  def directDeepCopies: Receive = {
+  def directTasks: Receive = {
     case event: AwsResourceReference =>
       awsResource = event.awsResource
 
-    case event: GetAllDeepCopyTasks =>
-      sender() ! currentDeepCopiesById.keySet
+    case event: GetRunningTasks =>
+      sender() ! currentTasksById.keySet
 
-    case event: GetDeepCopyStatus =>
-      deepCopyCluster forward event
+    case event: GetTask =>
+      taskCluster forward event
 
-    case event: DeepCopyOptions =>
+    case event: TaskDescription =>
       persist(event) { it =>
         updateState(it)
-        deepCopyCluster ! DeepCopyStart(awsResource, event)
+        routeTask(it)
       }
 
-    case event: DeepCopyComplete =>
+    case event: TaskComplete =>
       persist(event) { it =>
         updateState(it)
       }
@@ -80,32 +86,51 @@ class DeepCopyDirector extends PersistentActor with ActorLogging {
       updateState(event)
   }
 
+  def routeTask(taskDescription: TaskDescription, isContinued: Boolean = false, id: String = nextTaskId.toString): Unit = {
+    taskDescription match {
+      case event : DeepCopyTask =>
+        deepCopyCluster ! ExecuteTask(id, awsResource, taskDescription, isContinued)
+    }
+  }
+
   def updateState(event: Any) = {
     event match {
-      case event: DeepCopyOptions =>
-        currentDeepCopiesById += (event.akkaIdentifier -> event)
-      case event: DeepCopySuccess =>
-        currentDeepCopiesById -= event.options.akkaIdentifier
-      case event: DeepCopyFailure =>
-        currentDeepCopiesById -= event.options.akkaIdentifier
+      case event: ExecuteTask =>
+        nextTaskId = nextTaskId + 1
+        currentTasksById += (event.taskId -> event.description)
+      case event: TaskComplete =>
+        currentTasksById -= event.taskId
     }
   }
 }
 
-sealed trait DeepCopyDirectorProtocol
+sealed trait TaskDirectorProtocol
 
-object DeepCopyDirector {
+object TaskDirector {
   type Ref = ActorRef
   val typeName: String = this.getClass.getCanonicalName
 
-  case class GetAllDeepCopyTasks() extends DeepCopyDirectorProtocol
-  case class DeepCopyOptions(source: AwsReference[AutoScalingGroupIdentity], target: Target)
-    extends DeepCopyDirectorProtocol with AkkaClustered {
+  sealed trait TaskComplete extends TaskDirectorProtocol {
+    def taskId: String
+  }
+  case class TaskSuccess(taskId: String, newServerGroupName: String) extends TaskComplete
+  case class TaskFailure(taskId: String, message: String) extends TaskComplete
+
+  case class GetRunningTasks() extends TaskDirectorProtocol
+
+  case class ExecuteTask(taskId: String, awsResource: ActorRef, description: TaskDescription, isContinued: Boolean = false)
+    extends TaskDirectorProtocol with AkkaClustered {
+    val akkaIdentifier: String = description.akkaIdentifier
+  }
+
+  sealed trait TaskDescription extends AkkaClustered
+  case class DeepCopyTask(source: AwsReference[AutoScalingGroupIdentity], target: Target)
+    extends TaskDescription {
     val akkaIdentifier: String = s"DeepCopy.${source.akkaIdentifier}.${target.akkaIdentifier}"
   }
 
   case class Target(@BeanProperty account: String, @BeanProperty region: String, @BeanProperty vpcName: String)
-    extends DeepCopyDirectorProtocol with AkkaClustered {
+    extends TaskDirectorProtocol with AkkaClustered {
     @JsonIgnore def location: AwsLocation = {
       AwsLocation(account, region)
     }
@@ -115,7 +140,7 @@ object DeepCopyDirector {
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(
       typeName = typeName,
-      entryProps = Some(Props[DeepCopyDirector]),
+      entryProps = Some(Props[TaskDirector]),
       idExtractor = {
         case msg => ("singleton", msg)
       },

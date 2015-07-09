@@ -24,7 +24,8 @@ import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
 import com.netflix.spinnaker.tide.actor.aws.CloudDriverActor.{GetTaskDetail, CloudDriverResponse}
 import com.netflix.spinnaker.tide.actor.aws.DeepCopyActor._
-import com.netflix.spinnaker.tide.actor.aws.DeepCopyDirector.{Target, DeepCopyOptions}
+import com.netflix.spinnaker.tide.actor.aws.TaskActor.{Create, Log}
+import com.netflix.spinnaker.tide.actor.aws.TaskDirector._
 import com.netflix.spinnaker.tide.actor.aws.VpcPollingActor.GetVpcs
 import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
@@ -44,26 +45,27 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
   var sourceReference: AwsReference[AutoScalingGroupIdentity] = _
   var sourceVpcId: Option[String] = _
   var target: Target = _
-  var targetVpc: Option[Vpc] = _
+  var targetVpcId: String = _
+  var taskId: String = _
 
   def vpcCluster: ActorRef = {
     ClusterSharding.get(context.system).shardRegion(VpcPollingActor.typeName)
   }
 
-  def deepCopyDirector: ActorRef = {
-    ClusterSharding.get(context.system).shardRegion(DeepCopyDirector.typeName)
+  def taskDirector: ActorRef = {
+    ClusterSharding.get(context.system).shardRegion(TaskDirector.typeName)
+  }
+
+  def taskCluster: ActorRef = {
+    ClusterSharding.get(context.system).shardRegion(TaskActor.typeName)
   }
 
   var serverGroupState: Option[ServerGroupLatestState] = None
-
-  var history: List[Any] = Nil
   var resourcesRequired: Set[AwsIdentity] = Set()
   var resourcesFound: Set[AwsIdentity] = Set()
   var loadBalancerNameTargetToSource: Map[String, String] = Map()
-
   var cloudDriverReference: Option[ActorRef] = None
   var cloneServerGroupTaskId: Option[String] = None
-
   var isComplete = false
 
   case class VpcLocation(location: AwsLocation, vpcId: Option[String])
@@ -73,44 +75,47 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
     super.preRestart(reason, message)
   }
 
-  def getVpcByName(name: String, awsLocation: AwsLocation): Option[Vpc] = {
-    val future = (vpcCluster ? GetVpcs(awsLocation.account, awsLocation.region)).mapTo[List[Vpc]]
-    val vpcs = Await.result(future, timeout.duration)
-    vpcs.find { vpc =>
-      vpc.tags.exists(tag => tag.key == "Name" && tag.value == name)
-    }
-  }
-
   override def receiveCommand: Receive = {
-    case event: GetDeepCopyStatus =>
-      sender ! DeepCopyStatus(history, cloneServerGroupTaskId)
 
-    case event: DeepCopyStart =>
+    case ExecuteTask(_, newAwsResource, deepCopyTask: DeepCopyTask, isContinued) if isContinued =>
       checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckForCreatedResources())
-      val target = event.options.target
-      val vpcOption = getVpcByName(target.vpcName, target.location)
-      persist(event.copy(targetVpc = vpcOption)) { e =>
-        vpcOption match {
-          case Some(vpc) =>
-            updateState(e)
-            awsResource ! AwsResourceProtocol(sourceReference, GetServerGroup(), None)
-          case None =>
-            val message = s"Cannot find VPC '${target.vpcName}' in ${target.location.account} ${target.location.region}"
-            self ! DeepCopyFailure(event.options, message)
-        }
+      awsResource = newAwsResource
+      awsResource ! AwsResourceProtocol(sourceReference, GetServerGroup())
+
+    case event @ ExecuteTask(newTaskId, newAwsResource, deepCopyTask: DeepCopyTask, isContinued) =>
+      persist(event) { e =>
+        updateState(e)
+        taskCluster ! Log(taskId, s"Start deep copy of ${sourceReference.akkaIdentifier}")
+        checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckForCreatedResources())
+        vpcCluster ! GetVpcs(target.location.account, target.location.region)
       }
 
-    case event: DeepCopyContinue =>
-      checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckForCreatedResources())
-      awsResource = event.awsResource
-      awsResource ! AwsResourceProtocol(sourceReference, GetServerGroup(), None)
+    case vpcs: List[Vpc] =>
+      val vpcOption = vpcs.find { vpc =>
+        vpc.tags.exists(tag => tag.key == "Name" && tag.value == target.vpcName)
+      }
+      vpcOption match {
+        case Some(vpc) =>
+          persist(vpc) { it =>
+            updateState(it)
+            awsResource ! AwsResourceProtocol(sourceReference, GetServerGroup())
+          }
+        case None =>
+          val message = s"Cannot find VPC '${target.vpcName}' in ${target.location.account} ${target.location.region}"
+          self ! TaskFailure(taskId, message)
+      }
 
-    case event: DeepCopyComplete =>
+    case event: TaskComplete =>
       if (!isComplete) {
         persist(event) { it =>
           updateState(it)
           checkForCreatedResources.cancel()
-          deepCopyDirector ! it
+          val logMessage = event match {
+            case taskSuccess: TaskSuccess => s"Deep copy succeeded. Created '${taskSuccess.newServerGroupName}'"
+            case taskFailure: TaskFailure => s"Failure: ${taskFailure.message}"
+          }
+          taskCluster ! Log(taskId, logMessage)
+          taskDirector ! it
         }
       }
 
@@ -119,33 +124,23 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
         case (Some(cloudDriver), Some(id)) =>
           cloudDriver ! GetTaskDetail(id)
         case _ =>
-          resourcesRequired.diff(resourcesFound).foreach {
-            case identity: SecurityGroupIdentity =>
-              awsResource ! AwsResourceProtocol(AwsReference(target.location, identity.copy(vpcId = targetVpc.map(_.vpcId))),
-                GetSecurityGroup(), None)
-            case identity: LoadBalancerIdentity =>
-              awsResource ! AwsResourceProtocol(AwsReference(target.location, identity), GetLoadBalancer(), None)
-          }
+          resourcesRequired.diff(resourcesFound).foreach(checkForCreatedTargetResource)
       }
 
     case event: Requires =>
       if (!resourcesRequired.contains(event.awsIdentity)) {
         persist(event) { e =>
           updateState(e)
+          taskCluster ! Log(taskId, s"Requires ${e.awsIdentity.akkaIdentifier}")
+          checkForCreatedTargetResource(e.awsIdentity)
         }
-        val request = event match {
-          case Requires(identity: LoadBalancerIdentity) =>
-            AwsResourceProtocol(AwsReference(target.location, identity), GetLoadBalancer(), None)
-          case Requires(identity: SecurityGroupIdentity) =>
-            AwsResourceProtocol(AwsReference(target.location, identity.copy(vpcId = targetVpc.map(_.vpcId))), GetSecurityGroup(), None)
-        }
-        awsResource ! request
       }
 
     case event: Found =>
       if (!resourcesFound.contains(event.awsIdentity)) {
         persist(event) { e =>
           updateState(e)
+          taskCluster ! Log(taskId, s"Found ${e.awsIdentity.akkaIdentifier}")
           startServerGroupCloning()
         }
       } else {
@@ -172,11 +167,12 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
           val autoScalingGroup = serverGroupState.get.autoScalingGroup
           val newLoadBalancerNames = autoScalingGroup.loadBalancerNames.map(covertToTargetLoadBalancerName)
           val newAutoScalingGroup = autoScalingGroup.copy(
-            loadBalancerNames = newLoadBalancerNames, vpcId = targetVpc.map(_.vpcId), minSize = 0, maxSize = 0,
+            loadBalancerNames = newLoadBalancerNames, vpcId = Option(targetVpcId), minSize = 0, maxSize = 0,
             desiredCapacity = 0, subnetType = constructTargetSubnetType(autoScalingGroup.subnetType))
           val cloneServerGroup = AwsResourceProtocol(sourceReference,
             CloneServerGroup(newAutoScalingGroup, serverGroupState.get.launchConfiguration, startDisabled = true))
           val future = (awsResource ? cloneServerGroup).mapTo[CloudDriverResponse]
+          taskCluster ! Log(taskId, s"Cloning Server Group ${sourceReference.akkaIdentifier}")
           val cloudDriverResponse = Await.result(future, timeout.duration)
           cloudDriverReference = Option(cloudDriverResponse.cloudDriverReference)
           cloneServerGroupTaskId = Option(cloudDriverResponse.taskDetail.id)
@@ -203,19 +199,18 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
           } else {
             latestState.state.securityGroups.foreach(it => self ! Requires(SecurityGroupIdentity(it)))
             val newSubnetType = constructTargetSubnetType(latestState.state.subnetType)
-            val upsert = UpsertLoadBalancer(latestState.state.copy(vpcId = targetVpc.map(_.vpcId), subnetType = newSubnetType), overwrite = false)
+            val upsert = UpsertLoadBalancer(latestState.state.copy(vpcId = Option(targetVpcId),
+              subnetType = newSubnetType), overwrite = false)
             val referenceToUpsert = AwsReference(target.location, LoadBalancerIdentity(covertToTargetLoadBalancerName(name)))
-            persist(AwsResourceProtocol(referenceToUpsert, upsert)) { it =>
-              updateState(it)
-              awsResource ! it
-            }
+            taskCluster ! Log(taskId, s"Creating Load Balancer ${referenceToUpsert.akkaIdentifier}")
+            awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
           }
       }
 
     case event: SecurityGroupDetails =>
       val name = event.awsReference.identity.groupName
       val Source = VpcLocation(sourceReference.location, sourceVpcId)
-      val Target = VpcLocation(target.location, targetVpc.map(_.vpcId))
+      val Target = VpcLocation(target.location, Option(targetVpcId))
       VpcLocation(event.awsReference.location, event.awsReference.identity.vpcId) match {
         case Target =>
           event.latestState match {
@@ -234,11 +229,9 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
                 }
               }
               val upsert = UpsertSecurityGroup(latestState.state, overwrite = false)
-              val referenceToUpsert = AwsReference(target.location, SecurityGroupIdentity(name, targetVpc.map(_.vpcId)))
-              persist(AwsResourceProtocol(referenceToUpsert, upsert)) { it =>
-                updateState(it)
-                awsResource ! it
-              }
+              val referenceToUpsert = AwsReference(target.location, SecurityGroupIdentity(name, Option(targetVpcId)))
+              taskCluster ! Log(taskId, s"Creating Security Group ${referenceToUpsert.akkaIdentifier}")
+              awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
           }
       }
 
@@ -247,7 +240,7 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
         cloneServerGroupTaskId.foreach { id =>
           if (event.taskDetail.id == id) {
             val taskDetail = event.taskDetail
-            val options = DeepCopyOptions(sourceReference, target)
+            val options = DeepCopyTask(sourceReference, target)
             if (event.taskDetail.status.completed) {
               val resultName = "serverGroupNames"
               var newServerGroupName: String = ""
@@ -260,10 +253,10 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
                   newServerGroupName = resultParts(1)
                 }
               }
-              self ! DeepCopySuccess(options, newServerGroupName)
+              self ! TaskSuccess(taskId, newServerGroupName)
             }
             if (event.taskDetail.status.failed) {
-              self ! DeepCopyFailure(options, event.taskDetail.status.status)
+              self ! TaskFailure(taskId, event.taskDetail.status.status)
             }
           }
         }
@@ -277,35 +270,25 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
 
   def updateState(event: Any) = {
     event match {
-      case event: DeepCopyStart =>
-        awsResource = event.awsResource
-        sourceReference = event.options.source
-        target = event.options.target
-        targetVpc = event.targetVpc
+      case ExecuteTask(newTaskId, newAwsResource, deepCopyTask: DeepCopyTask, false) =>
+        taskId = newTaskId
+        awsResource = newAwsResource
+        sourceReference = deepCopyTask.source
+        target = deepCopyTask.target
         resourcesRequired = Set()
         resourcesFound = Set()
         loadBalancerNameTargetToSource = Map()
         cloneServerGroupTaskId = None
         isComplete = false
-        history = s"Start deep copy of ${sourceReference.akkaIdentifier}" :: history
-      case event: DeepCopyFailure =>
+      case vpc: Vpc =>
+        targetVpcId = vpc.vpcId
+      case event: TaskComplete =>
         isComplete = true
-        history = s"Failure: ${event.message}" :: history
-      case event: DeepCopySuccess =>
-        isComplete = true
-        history = s"Deep copy succeeded. Created '${event.newServerGroupName}'" :: history
       case Requires(identity: AwsIdentity) =>
-        history = s"Requires ${identity.akkaIdentifier}" :: history
         resourcesRequired += identity
       case Found(identity: AwsIdentity) =>
-        history = s"Found ${identity.akkaIdentifier}" :: history
         resourcesFound += identity
-      case AwsResourceProtocol(reference, upsert: UpsertLoadBalancer, _) =>
-        history = s"Creating Load Balancer ${reference.akkaIdentifier}" :: history
-      case AwsResourceProtocol(reference, upsert: UpsertSecurityGroup, _) =>
-        history = s"Creating Security Group ${reference.akkaIdentifier}" :: history
       case event: CloneServerGroupTask =>
-        history = s"Cloning Server Group" :: history
         cloneServerGroupTaskId = Option(event.response.taskDetail.id)
       case _ => Nil
     }
@@ -315,6 +298,17 @@ class DeepCopyActor() extends PersistentActor with ActorLogging {
     case RecoveryCompleted =>
     case event =>
       updateState(event)
+  }
+
+
+  def checkForCreatedTargetResource(identity: AwsIdentity): Unit = {
+    identity match {
+      case identity: SecurityGroupIdentity =>
+        awsResource ! AwsResourceProtocol(AwsReference(target.location, identity.copy(vpcId = Option(targetVpcId))),
+          GetSecurityGroup(), None)
+      case identity: LoadBalancerIdentity =>
+        awsResource ! AwsResourceProtocol(AwsReference(target.location, identity), GetLoadBalancer(), None)
+    }
   }
 
   def constructTargetSubnetType(sourceSubnetTypeOption: Option[String]): Option[String] = {
@@ -351,42 +345,23 @@ object DeepCopyActor {
   type Ref = ActorRef
   val typeName: String = this.getClass.getCanonicalName
 
-  sealed trait DeepCopyComplete extends DeepCopyProtocol
-  case class DeepCopySuccess(options: DeepCopyOptions, newServerGroupName: String) extends DeepCopyComplete
-  case class DeepCopyFailure(options: DeepCopyOptions, message: String) extends DeepCopyComplete
-
+  case class GetTargetVpcId()
   case class CheckForCreatedResources() extends DeepCopyProtocol
   case class Requires(awsIdentity: AwsIdentity) extends DeepCopyProtocol
   case class Found(awsIdentity: AwsIdentity) extends DeepCopyProtocol
   case class StartServerGroupCloning() extends DeepCopyProtocol
   case class CloneServerGroupTask(response: CloudDriverResponse) extends DeepCopyProtocol
-  case class DeepCopyStatus(history: List[Any], cloneServerGroupTaskId: Option[String]) extends DeepCopyProtocol
-
-  case class DeepCopyStart(awsResource: ActorRef, options: DeepCopyOptions, targetVpc: Option[Vpc] = None) extends DeepCopyProtocol with AkkaClustered {
-    val akkaIdentifier: String = options.akkaIdentifier
-  }
-  case class DeepCopyContinue(awsResource: ActorRef, options: DeepCopyOptions, targetVpc: Option[Vpc] = None) extends DeepCopyProtocol with AkkaClustered {
-    val akkaIdentifier: String = options.akkaIdentifier
-  }
-
-  case class GetDeepCopyStatus(id: String) extends DeepCopyProtocol with  AkkaClustered {
-    val akkaIdentifier: String = id
-  }
 
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(
       typeName = typeName,
       entryProps = Some(Props[DeepCopyActor]),
       idExtractor = {
-        case msg: DeepCopyStart =>
-          (msg.akkaIdentifier, msg)
-        case msg: GetDeepCopyStatus =>
+        case msg: ExecuteTask =>
           (msg.akkaIdentifier, msg)
       },
       shardResolver = {
-        case msg: DeepCopyStart =>
-          (msg.akkaIdentifier.hashCode % 10).toString
-        case msg: GetDeepCopyStatus =>
+        case msg: ExecuteTask =>
           (msg.akkaIdentifier.hashCode % 10).toString
       })
   }
