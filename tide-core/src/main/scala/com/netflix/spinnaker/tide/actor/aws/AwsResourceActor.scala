@@ -22,7 +22,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
-import com.netflix.spinnaker.tide.actor.aws.DeepCopyActor.CloneServerGroupTask
+import com.netflix.spinnaker.tide.actor.aws.ServerGroupCloneActor.CloneServerGroupTask
 import scala.concurrent.duration.DurationInt
 
 class AwsResourceActor(private val cloudDriver: CloudDriverActor.Ref) extends Actor with ActorLogging {
@@ -74,7 +74,10 @@ case class ClusterName(appName: String, stack: String, detail: String) {
   }
 }
 
-sealed trait AwsResourceEvent
+sealed trait AwsResourceEvent extends Serializable
+sealed trait SecurityGroupEvent extends AwsResourceEvent
+sealed trait LoadBalancerEvent extends AwsResourceEvent
+sealed trait ServerGroupEvent extends AwsResourceEvent
 
 object AwsResourceActor {
   type Ref = ActorRef
@@ -88,15 +91,13 @@ object AwsResourceActor {
     @JsonIgnore val akkaIdentifier = s"${awsReference.akkaIdentifier}"
   }
 
-  sealed trait SecurityGroupEvent extends AwsResourceEvent
   case class GetSecurityGroup() extends SecurityGroupEvent
   case class UpsertSecurityGroup(state: SecurityGroupState, overwrite: Boolean = true) extends SecurityGroupEvent
-  case class SecurityGroupLatestState(state: SecurityGroupState) extends SecurityGroupEvent
+  case class SecurityGroupLatestState(securityGroupId: String, state: SecurityGroupState) extends SecurityGroupEvent
   case class SecurityGroupDetails(awsReference: AwsReference[SecurityGroupIdentity],
                                   latestState: Option[SecurityGroupLatestState],
                                   desiredState: Option[UpsertSecurityGroup]) extends SecurityGroupEvent
 
-  sealed trait LoadBalancerEvent extends AwsResourceEvent
   case class GetLoadBalancer() extends LoadBalancerEvent
   case class UpsertLoadBalancer(state: LoadBalancerState, overwrite: Boolean = true) extends LoadBalancerEvent
   case class LoadBalancerLatestState(state: LoadBalancerState) extends LoadBalancerEvent
@@ -104,7 +105,6 @@ object AwsResourceActor {
                                  latestState: Option[LoadBalancerLatestState],
                                  desiredState: Option[UpsertLoadBalancer]) extends LoadBalancerEvent
 
-  sealed trait ServerGroupEvent extends AwsResourceEvent
   case class GetServerGroup() extends ServerGroupEvent
   case class CloneServerGroup(autoScalingGroup: AutoScalingGroupState, launchConfiguration: LaunchConfigurationState,
                               startDisabled: Boolean = false, application: Option[String] = None,

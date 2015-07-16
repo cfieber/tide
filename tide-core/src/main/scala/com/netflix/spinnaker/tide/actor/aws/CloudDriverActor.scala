@@ -46,7 +46,7 @@ class CloudDriverActor(private val cloudDriverService: CloudDriverService) exten
   }
 }
 
-sealed trait CloudDriverProtocol
+sealed trait CloudDriverProtocol extends Serializable
 
 object CloudDriverActor {
   type Ref = ActorRef

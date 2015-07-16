@@ -19,10 +19,16 @@ package com.netflix.spinnaker.tide.actor.aws
 import com.fasterxml.jackson.annotation.{JsonIgnore, JsonProperty, JsonUnwrapped}
 import com.fasterxml.jackson.databind.ObjectMapper
 
+import scala.beans.BeanProperty
+
 object AwsApi {
 
   case class AwsLocation(account: String, region: String) extends AkkaClustered {
     @JsonIgnore val akkaIdentifier = s"$account.$region"
+  }
+
+  case class VpcLocation(@JsonUnwrapped location: AwsLocation, vpcName: Option[String]) extends AkkaClustered {
+    @JsonIgnore val akkaIdentifier = s"${location.akkaIdentifier}.${vpcName.getOrElse("")}"
   }
 
   trait AwsIdentity extends AkkaClustered
@@ -41,7 +47,19 @@ object AwsApi {
     @JsonIgnore val akkaIdentifier: String = s"SecurityGroup.$groupName.${vpcId.getOrElse("")}"
   }
 
-  case class SecurityGroupState(description: String, ipPermissions: Set[IpPermission])
+  case class SecurityGroupState(description: String, ipPermissions: Set[IpPermission]) {
+    def ensureSecurityGroupNameOnIngressRules(securityGroupIdToName: Map[String, SecurityGroupIdentity]): SecurityGroupState = {
+      val newIpPermissions = ipPermissions.map { ipPermission =>
+        val newUserIdGroupPairs = ipPermission.userIdGroupPairs.map {
+          case pair@UserIdGroupPairs(_, Some(groupName)) => pair
+          case pair@UserIdGroupPairs(Some(groupId), None) =>
+            UserIdGroupPairs(Option(groupId), securityGroupIdToName.get(groupId).map(_.groupName))
+        }
+        ipPermission.copy(userIdGroupPairs = newUserIdGroupPairs)
+      }
+      copy(ipPermissions = newIpPermissions)
+    }
+  }
 
   case class IpPermission(fromPort: Int,
                           toPort: Int,
@@ -57,6 +75,54 @@ object AwsApi {
 
   case class LoadBalancerIdentity(loadBalancerName: String) extends AwsIdentity {
     @JsonIgnore val akkaIdentifier: String = s"LoadBalancer.$loadBalancerName"
+
+    @JsonIgnore def forVpc(vpcNameOption: Option[String]): LoadBalancerIdentity = {
+      vpcNameOption match {
+        case None => this
+        case Some(vpcName) =>
+          val targetName = loadBalancerName match {
+            case s if s.endsWith("-frontend") =>
+              s"${s.dropRight("-frontend".length)}-$vpcName"
+            case s if s.endsWith("-vpc") =>
+              s"${loadBalancerName.dropRight("-vpc".length)}-$vpcName"
+            case s if s.endsWith(s"-$vpcName") =>
+              loadBalancerName
+            case s =>
+              s"$loadBalancerName-$vpcName"
+          }
+          LoadBalancerIdentity(targetName)
+      }
+    }
+
+    @JsonIgnore def isConsistentWithVpc(vpcNameOption: Option[String]): Boolean = {
+      vpcNameOption match {
+        case None => loadBalancerName.endsWith("-frontend")
+        case Some(vpcName) => loadBalancerName.endsWith(s"-$vpcName")
+      }
+    }
+  }
+
+  def constructTargetSubnetType(sourceSubnetType: Option[String], targetVpcName: Option[String]): Option[String] = {
+    sourceSubnetType.map{ subnetType =>
+      val cleanSubnetType = subnetType.replaceAll("DEPRECATED_", "").replaceAll("-elb", "").replaceAll("-ec2", "")
+      targetVpcName match {
+        case Some(vpcName) => s"${cleanSubnetType.split(" ").head} ($targetVpcName)"
+        case None => s"${cleanSubnetType.split(" ").head}"
+      }
+    }
+  }
+
+  def normalizeSecurityGroupNames(securityGroups: Set[String], securityGroupIdToName: Map[String, SecurityGroupIdentity]): Set[String] = {
+    securityGroups.map { securityGroupName =>
+      if (securityGroupName.startsWith("sg-")) {
+        securityGroupIdToName.get(securityGroupName) match {
+          case None => securityGroupName
+          case Some(identity) => identity.groupName
+        }
+      } else {
+        securityGroupName
+      }
+    }
   }
 
   case class LoadBalancerState(createdTime: Long, @JsonProperty("VPCId") vpcId: Option[String],
@@ -64,7 +130,29 @@ object AwsApi {
                                healthCheck: HealthCheck, listenerDescriptions: Set[ListenerDescription],
                                scheme: String, securityGroups: Set[String],
                                sourceSecurityGroup: SourceSecurityGroup, subnets: Set[String],
-                               subnetType: Option[String])
+                               subnetType: Option[String]) {
+
+    def forVpc(vpcName: Option[String], vpcId: Option[String]): LoadBalancerState = {
+      this.copy(vpcId = vpcId, subnetType = constructTargetSubnetType(subnetType, vpcName))
+    }
+
+    def convertToSecurityGroupNames(securityGroupIdToName: Map[String, SecurityGroupIdentity]): LoadBalancerState = {
+      copy(securityGroups = normalizeSecurityGroupNames(securityGroups, securityGroupIdToName))
+    }
+
+    def populateVpcAttributes(vpcs: List[Vpc], subnetDetails: List[Subnet]): LoadBalancerState = {
+      val loadBalancerState: Option[LoadBalancerState] = subnets.headOption.flatMap { subnetId =>
+        val subnetOption = subnetDetails.find(_.subnetId == subnetId)
+        subnetOption.map { subnet =>
+          copy(subnetType = Option(subnet.subnetType), vpcId = Option(subnet.vpcId))
+        }
+      }
+      loadBalancerState match {
+        case Some(state) => state
+        case None => this
+      }
+    }
+  }
 
   case class HealthCheck(healthyThreshold: Int, interval: Int, target: String, timeout: Int, unhealthyThreshold: Int)
 
@@ -87,7 +175,11 @@ object AwsApi {
                                       ebsOptimized: Boolean, iamInstanceProfile: String, imageId: String,
                                       instanceMonitoring: InstanceMonitoring, instanceType: String, kernelId: String,
                                       keyName: String, ramdiskId: String,
-                                      securityGroups: Set[String], spotPrice: Option[String])
+                                      securityGroups: Set[String], spotPrice: Option[String]) {
+    def convertToSecurityGroupNames(securityGroupIdToName: Map[String, SecurityGroupIdentity]): LaunchConfigurationState = {
+      copy(securityGroups = normalizeSecurityGroupNames(securityGroups, securityGroupIdToName))
+    }
+  }
 
   case class InstanceMonitoring(enabled: Boolean)
 
@@ -108,7 +200,34 @@ object AwsApi {
                                    healthCheckType: String, loadBalancerNames: Set[String],
                                    maxSize: Int, minSize: Int, suspendedProcesses: Set[SuspendedProcess],
                                    terminationPolicies: Set[String],
-                                   subnetType: Option[String], vpcId: Option[String])
+                                   subnetType: Option[String], vpcName: Option[String]) {
+    def forVpc(vpcName: Option[String]): AutoScalingGroupState = {
+      val newLoadBalancerNames = loadBalancerNames.map(LoadBalancerIdentity(_).forVpc(vpcName).loadBalancerName)
+      this.copy(loadBalancerNames = newLoadBalancerNames, vpcName = vpcName,
+        subnetType = constructTargetSubnetType(subnetType, vpcName))
+    }
+
+    def withCapacity(size: Int): AutoScalingGroupState = {
+      copy(minSize = 0, maxSize = 0, desiredCapacity = 0)
+    }
+
+    def populateVpcAttributes(vpcs: List[Vpc], subnets: List[Subnet]): AutoScalingGroupState = {
+      val splitVpcZoneIdentifier = VPCZoneIdentifier.split(",")
+      val asgState: Option[AutoScalingGroupState] = splitVpcZoneIdentifier.headOption.flatMap { subnetId =>
+        val subnetOption = subnets.find(_.subnetId == subnetId)
+        subnetOption.flatMap { subnet =>
+          val vpcOption = vpcs.find(_.vpcId == subnet.vpcId)
+          vpcOption.map { vpc =>
+            copy(subnetType = Option(subnet.subnetType), vpcName = vpc.name)
+          }
+        }
+      }
+      asgState match {
+        case Some(state) => state
+        case None => this
+      }
+    }
+  }
 
   case class SuspendedProcess(processName: String, suspensionReason: String)
 
@@ -139,6 +258,11 @@ object AwsApi {
 
   case class Vpc(vpcId: String,
                  cidrBlock: String, dhcpOptionsId: String, instanceTenancy: String, isDefault: Boolean, state: String,
-                 tags: List[Tag])
+                 tags: List[Tag]) {
+    def name: Option[String] = {
+      val nameTagOption: Option[Tag] = tags.find(_.key == "Name")
+      nameTagOption.map(_.value)
+    }
+  }
 
 }

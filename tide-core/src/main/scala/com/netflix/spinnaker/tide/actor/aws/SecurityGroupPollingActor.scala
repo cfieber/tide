@@ -17,42 +17,43 @@
 package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor._
-import akka.contrib.pattern.ClusterSharding
-import akka.persistence.{RecoveryCompleted, PersistentActor}
+import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, SecurityGroupLatestState}
-import com.netflix.spinnaker.tide.api.EddaService
-import scala.concurrent.duration.DurationInt
+import com.netflix.spinnaker.tide.actor.aws.SecurityGroupPollingActor.GetSecurityGroupIdToNameMappings
 
 class SecurityGroupPollingActor extends PollingActor {
 
   var securityGroupIdToName: Map[String, SecurityGroupIdentity] = Map()
 
-  override def poll() = {
-      eddaService.securityGroups.foreach { securityGroup =>
-        securityGroupIdToName += (securityGroup.groupId -> securityGroup.identity)
-        val state = addSecurityGroupNameToIngressRules(securityGroup.state)
-        val latestState = SecurityGroupLatestState(state)
-        resourceCluster(SecurityGroupActor.typeName) ! AwsResourceProtocol(AwsReference(AwsLocation(account, region),
-          securityGroup.identity), latestState, Option(cloudDriver))
-      }
+  override def receiveCommand: Receive = {
+    case event: GetSecurityGroupIdToNameMappings =>
+      sender() ! securityGroupIdToName
+    case event =>
+      super.receiveCommand(event)
   }
 
-  def addSecurityGroupNameToIngressRules(state: SecurityGroupState): SecurityGroupState = {
-    val newIpPermissions = state.ipPermissions.map { ipPermission =>
-      val newUserIdGroupPairs = ipPermission.userIdGroupPairs.map {
-        case pair@UserIdGroupPairs(_, Some(groupName)) => pair
-        case pair@UserIdGroupPairs(Some(groupId), None) =>
-          UserIdGroupPairs(Option(groupId), securityGroupIdToName.get(groupId).map(_.groupName))
-      }
-      ipPermission.copy(userIdGroupPairs = newUserIdGroupPairs)
+  override def poll() = {
+    val securityGroups = eddaService.securityGroups
+    securityGroupIdToName = securityGroups.map { securityGroup =>
+      securityGroup.groupId -> securityGroup.identity
+    }.toMap
+
+    securityGroups.foreach { securityGroup =>
+      val normalizedState = securityGroup.state.ensureSecurityGroupNameOnIngressRules(securityGroupIdToName)
+      val latestState = SecurityGroupLatestState(securityGroup.groupId, normalizedState)
+      val reference = AwsReference(AwsLocation(account, region), securityGroup.identity)
+      resourceCluster(SecurityGroupActor.typeName) ! AwsResourceProtocol(reference, latestState, Option(cloudDriver))
     }
-    state.copy(ipPermissions = newIpPermissions)
   }
 }
 
 object SecurityGroupPollingActor extends PollingActorObject {
   type Ref = ActorRef
   val props = Props[SecurityGroupPollingActor]
+
+  case class GetSecurityGroupIdToNameMappings(account: String, region: String) extends AkkaClustered {
+    @JsonIgnore val akkaIdentifier = s"$account.$region"
+  }
 }
 

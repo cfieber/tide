@@ -16,53 +16,40 @@
 
 package com.netflix.spinnaker.tide.actor.aws
 
-import akka.actor.{Props, ActorRef, ActorLogging, Actor}
-import akka.contrib.pattern.ClusterSharding
-import akka.persistence.{RecoveryCompleted, PersistentActor}
+import akka.actor.{Props, ActorRef}
+import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, ServerGroupLatestState}
-import com.netflix.spinnaker.tide.api.EddaService
+import com.netflix.spinnaker.tide.actor.aws.SecurityGroupPollingActor.GetSecurityGroupIdToNameMappings
+import com.netflix.spinnaker.tide.actor.aws.SubnetPollingActor.GetSubnets
+import com.netflix.spinnaker.tide.actor.aws.VpcPollingActor.GetVpcs
+import akka.pattern.ask
 import scala.concurrent.duration.DurationInt
+import scala.concurrent.Await
+
 
 class ServerGroupPollingActor extends PollingActor {
-
-  var securityGroupIdToName: Map[String, SecurityGroupIdentity] = Map()
-  var launchConfigNameToAutoScalingGroup: Map[String, AutoScalingGroup] = Map()
+  implicit val timeout = Timeout(5 seconds)
 
   override def poll() = {
-      val subnets = eddaService.subnets
-      val launchConfigurations = eddaService.launchConfigurations
-      val autoScalingGroups = eddaService.autoScalingGroups
-      eddaService.securityGroups.foreach { securityGroup =>
-        securityGroupIdToName += (securityGroup.groupId -> securityGroup.identity)
-      }
+    val vpcsFuture = (getShardCluster(VpcPollingActor.typeName) ? GetVpcs(account, region)).mapTo[List[Vpc]]
+    val subnetsFuture = (getShardCluster(SubnetPollingActor.typeName) ? GetSubnets(account, region)).mapTo[List[Subnet]]
+    val securityGroupsFuture = (getShardCluster(SecurityGroupPollingActor.typeName) ? GetSecurityGroupIdToNameMappings(account, region)).mapTo[Map[String, SecurityGroupIdentity]]
+    val securityGroupIdToName: Map[String, SecurityGroupIdentity] = Await.result(securityGroupsFuture, timeout.duration)
+    val vpcs = Await.result(vpcsFuture, timeout.duration)
+    val subnets = Await.result(subnetsFuture, timeout.duration)
+    val launchConfigurations = eddaService.launchConfigurations
+    val autoScalingGroups = eddaService.autoScalingGroups
+
+    var launchConfigNameToAutoScalingGroup: Map[String, AutoScalingGroup] = Map()
       autoScalingGroups.foreach { autoScalingGroup =>
         launchConfigNameToAutoScalingGroup += (autoScalingGroup.state.launchConfigurationName -> autoScalingGroup)
       }
       launchConfigurations.foreach { launchConfiguration =>
         val autoScalingGroupOption: Option[AutoScalingGroup] = launchConfigNameToAutoScalingGroup.get(launchConfiguration.identity.launchConfigurationName)
         autoScalingGroupOption.foreach { autoScalingGroup =>
-          val securityGroupNames = launchConfiguration.state.securityGroups.map { securityGroupName =>
-            if (securityGroupName.startsWith("sg-")) {
-              securityGroupIdToName.get(securityGroupName) match {
-                case None => securityGroupName
-                case Some(identity) => identity.groupName
-              }
-            } else {
-              securityGroupName
-            }
-          }
-          val normalizedLaunchConfigurationState = launchConfiguration.state.copy(securityGroups = securityGroupNames)
-          var normalizedAutoScalingGroupState = autoScalingGroup.state
-          val vpcZoneIdentifier = autoScalingGroup.state.VPCZoneIdentifier
-          val splitVpcZoneIdentifier = vpcZoneIdentifier.split(",")
-          splitVpcZoneIdentifier.headOption.foreach { subnetId =>
-            val subnetOption = subnets.find(_.subnetId == subnetId)
-            subnetOption.foreach { subnet =>
-              normalizedAutoScalingGroupState = normalizedAutoScalingGroupState
-                .copy(subnetType = Option(subnet.subnetType), vpcId = Option(subnet.vpcId))
-            }
-          }
+          val normalizedLaunchConfigurationState = launchConfiguration.state.convertToSecurityGroupNames(securityGroupIdToName)
+          var normalizedAutoScalingGroupState = autoScalingGroup.state.populateVpcAttributes(vpcs, subnets)
           val latestState = ServerGroupLatestState(normalizedAutoScalingGroupState, normalizedLaunchConfigurationState)
           resourceCluster(ServerGroupActor.typeName) ! AwsResourceProtocol(AwsReference(AwsLocation(account, region), autoScalingGroup.identity),
             latestState, Option(cloudDriver))

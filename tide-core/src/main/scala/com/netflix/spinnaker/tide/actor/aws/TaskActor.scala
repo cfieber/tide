@@ -54,7 +54,7 @@ class TaskActor extends PersistentActor with ActorLogging {
 
 }
 
-sealed trait TaskProtocol {
+sealed trait TaskProtocol extends Serializable {
   def taskId: String
 }
 
@@ -63,10 +63,10 @@ object TaskActor {
   val typeName: String = this.getClass.getCanonicalName
 
   case class Log(taskId: String, message: String, timeStamp: Long = 0) extends TaskProtocol
-  case class Warn(taskId: String, AwsReference: AwsReference[AwsIdentity], message: String) extends TaskProtocol
+  case class Warn(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity], message: String) extends TaskProtocol
 
   sealed trait Mutation extends TaskProtocol
-  case class Create(taskId: String, AwsReference: AwsReference[AwsIdentity]) extends Mutation
+  case class Create(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity]) extends Mutation
 
   case class GetTask(taskId: String) extends TaskProtocol
   case class TaskStatus(taskId: String, history: List[Log], warnings: List[Warn], mutations: List[Mutation]) extends TaskProtocol
@@ -74,7 +74,7 @@ object TaskActor {
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(
       typeName = typeName,
-      entryProps = Some(Props[DeepCopyActor]),
+      entryProps = Some(Props[ServerGroupCloneActor]),
       idExtractor = {
         case msg: TaskProtocol =>
           (msg.taskId, msg)

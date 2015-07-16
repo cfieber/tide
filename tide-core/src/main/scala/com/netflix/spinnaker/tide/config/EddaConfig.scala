@@ -42,18 +42,16 @@ class EddaConfig {
 
   @PostConstruct
   def startPollingEdda(): Unit = {
-    val securityGroupPollingCluster: ActorRef = clusterSharding.shardRegion(SecurityGroupPollingActor.typeName)
-    val loadBalancerPollingCluster: ActorRef = clusterSharding.shardRegion(LoadBalancerPollingActor.typeName)
-    val serverGroupPollingCluster: ActorRef = clusterSharding.shardRegion(ServerGroupPollingActor.typeName)
-    val vpcPollingCluster: ActorRef = clusterSharding.shardRegion(VpcPollingActor.typeName)
+    val pollers: Seq[PollingActorObject] =Seq(SecurityGroupPollingActor, LoadBalancerPollingActor,
+      ServerGroupPollingActor, VpcPollingActor, SubnetPollingActor)
     val accounts = eddaSettings.getAccountToRegionsMapping.keySet()
     for (account <- accounts) {
       val regions: java.util.List[String] = eddaSettings.getAccountToRegionsMapping.get(account)
       for (region <- regions) {
-        securityGroupPollingCluster ! Start(account, region, eddaSettings.urlTemplate, cloudDriver)
-        loadBalancerPollingCluster ! Start(account, region, eddaSettings.urlTemplate, cloudDriver)
-        serverGroupPollingCluster ! Start(account, region, eddaSettings.urlTemplate, cloudDriver)
-        vpcPollingCluster ! Start(account, region, eddaSettings.urlTemplate, cloudDriver)
+        val start = Start(account, region, eddaSettings.urlTemplate, cloudDriver)
+        for (poller <- pollers) {
+          clusterSharding.shardRegion(poller.typeName) ! start
+        }
       }
     }
   }
