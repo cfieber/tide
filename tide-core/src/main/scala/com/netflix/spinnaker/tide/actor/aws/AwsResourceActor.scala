@@ -82,6 +82,9 @@ object AwsResourceActor {
   type Ref = ActorRef
 
   case class LatestStateTimeout() extends AwsResourceEvent
+  case class ClearLatestState() extends AwsResourceEvent
+  case class ClearDesiredState() extends AwsResourceEvent
+  case class MutateState() extends AwsResourceEvent
 
   case class AwsResourceReference(awsResource: AwsResourceActor.Ref) extends AwsResourceEvent
 
