@@ -81,11 +81,13 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
           updateState(it)
           checkForCreatedResources.cancel()
           orchestrator ! it
-          val logMessage = event match {
-            case taskSuccess: TaskSuccess => "All resources copied successfully."
-            case taskFailure: TaskFailure => s"Failure: ${taskFailure.message}"
+          if (!task.dryRun) {
+            val logMessage = event match {
+              case taskSuccess: TaskSuccess => "All resources copied successfully."
+              case taskFailure: TaskFailure => s"Failure: ${taskFailure.message}"
+            }
+            getShardCluster(TaskActor.typeName) ! Log(taskId, logMessage)
           }
-          getShardCluster(TaskActor.typeName) ! Log(taskId, logMessage)
         }
       }
 
@@ -105,7 +107,9 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       if (!resourcesFound.contains(event.awsIdentity)) {
         persist(event) { e =>
           updateState(e)
-          getShardCluster(TaskActor.typeName) ! Log(taskId, s"Found ${e.awsIdentity.akkaIdentifier}")
+          if (!task.dryRun) {
+            getShardCluster(TaskActor.typeName) ! Log(taskId, s"Found ${e.awsIdentity.akkaIdentifier}")
+          }
           checkCompletion()
         }
       }
@@ -134,10 +138,14 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
                   self ! Requires(SecurityGroupIdentity(userIdGroupPair.groupName.get))
                 }
               }
-              val upsert = UpsertSecurityGroup(latestState.state, overwrite = false)
               val referenceToUpsert = AwsReference(task.target.location, SecurityGroupIdentity(name, vpcIds.target))
               getShardCluster(TaskActor.typeName) ! Create(taskId, referenceToUpsert)
-              awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
+              if (task.dryRun) {
+                self ! Found(SecurityGroupIdentity(name))
+              } else {
+                val upsert = UpsertSecurityGroup(latestState.state, overwrite = false)
+                awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
+              }
           }
       }
 
@@ -159,11 +167,15 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               self ! Found(LoadBalancerIdentity(name))
             case Source =>
               latestState.state.securityGroups.foreach(it => self ! Requires(SecurityGroupIdentity(it)))
-              val upsert = UpsertLoadBalancer(latestState.state.forVpc(task.target.vpcName, vpcIds.target), overwrite = false)
               val targetLoadBalancer = identity.forVpc(task.target.vpcName)
               val referenceToUpsert = AwsReference(task.target.location, targetLoadBalancer)
               getShardCluster(TaskActor.typeName) ! Create(taskId, referenceToUpsert)
-              awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
+              if (task.dryRun) {
+                self ! Found(targetLoadBalancer)
+              } else {
+                val upsert = UpsertLoadBalancer(latestState.state.forVpc(task.target.vpcName, vpcIds.target), overwrite = false)
+                awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
+              }
           }
       }
 
@@ -210,9 +222,13 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   def checkCompletion() = {
     val missingDependencies = resourcesRequired.diff(resourcesFound)
     if (missingDependencies.isEmpty) {
-      val securityGroupIdsSourceToTarget: Map[String, String] = securityGroupNameToSourceId.keySet.map { name =>
-        name -> securityGroupNameToTargetId(name)
-      }.toMap
+      val securityGroupIdsSourceToTarget: Map[String, String] = if (task.dryRun) {
+        Map()
+      } else {
+        securityGroupNameToSourceId.keySet.map { name =>
+          name -> securityGroupNameToTargetId(name)
+        }.toMap
+      }
       self ! TaskSuccess(taskId, task, DependencyCopyTaskResult(securityGroupIdsSourceToTarget))
     } else {
       missingDependencies.foreach(checkForCreatedTargetResource)
@@ -242,7 +258,7 @@ object DependencyCopyActor {
   case class DependencyCopyTask(source: VpcLocation,
                                 target: VpcLocation,
                                 requiredSecurityGroupNames: Set[String],
-                                sourceLoadBalancerNames: Set[String]) extends TaskDescription with DependencyCopyProtocol {
+                                sourceLoadBalancerNames: Set[String], dryRun: Boolean = false) extends TaskDescription with DependencyCopyProtocol {
     val taskType: String = "DependencyCopyTask"
   }
   case class VpcIds(source: Option[String], target: Option[String]) extends DependencyCopyProtocol

@@ -18,6 +18,7 @@ package com.netflix.spinnaker.tide.actor.aws
 
 import com.fasterxml.jackson.annotation.{JsonIgnore, JsonProperty, JsonUnwrapped}
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
 
 import scala.beans.BeanProperty
 
@@ -188,6 +189,9 @@ object AwsApi {
 
   case class AutoScalingGroupIdentity(autoScalingGroupName: String) extends AwsIdentity {
     @JsonIgnore val akkaIdentifier: String = s"AutoScalingGroup.$autoScalingGroupName"
+    def nextGroup: AutoScalingGroupIdentity = {
+      AutoScalingGroupIdentity(AutoScalingGroupNameBuilder.buildNextGroupName(autoScalingGroupName))
+    }
   }
 
   type ServerGroupIdentity = AutoScalingGroupIdentity

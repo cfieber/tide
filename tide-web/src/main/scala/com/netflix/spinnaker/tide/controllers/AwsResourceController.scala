@@ -131,9 +131,10 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
   def deepCopyServerGroup(@PathVariable("account") account: String,
                           @PathVariable("region") region: String,
                           @PathVariable("asgName") asgName: String,
+                          @RequestParam(value = "dryRun", defaultValue = "false") dryRun: Boolean,
                           @RequestBody target: VpcDefinition) = {
     val reference = AwsReference(AwsLocation(account, region), AutoScalingGroupIdentity(asgName))
-    val task = ServerGroupDeepCopyTask(reference, target.toVpcLocation)
+    val task = ServerGroupDeepCopyTask(reference, target.toVpcLocation, dryRun = dryRun)
     val future = (taskDirector ? task).mapTo[TaskStatus]
     val taskStatus = Await.result(future, timeout.duration)
     taskStatus.taskId
@@ -142,8 +143,9 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
   @ApiOperation(value = "Copies security groups and load balancers to the target.",
     notes = "Specified security groups and load balancers as well as their dependencies will be copied if they do not exist. Returns the task id.")
   @RequestMapping(value = Array("/deepCopy/"), method = Array(POST))
-  def deepCopyServerGroupDependencies(@RequestBody options: DependencyCopyDefinition) = {
-    val future = (taskDirector ? options.toDependencyCopyTask).mapTo[TaskStatus]
+  def deepCopyServerGroupDependencies(@RequestParam(value = "dryRun", defaultValue = "false") dryRun: Boolean,
+                                      @RequestBody options: DependencyCopyDefinition) = {
+    val future = (taskDirector ? options.toDependencyCopyTask.copy(dryRun = dryRun)).mapTo[TaskStatus]
     val taskStatus = Await.result(future, timeout.duration)
     taskStatus.taskId
   }

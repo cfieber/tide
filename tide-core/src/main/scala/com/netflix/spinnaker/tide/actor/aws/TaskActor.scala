@@ -75,7 +75,9 @@ object TaskActor {
   case class Warn(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity], message: String) extends TaskProtocol
 
   sealed trait Mutation extends TaskProtocol
-  case class Create(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity]) extends Mutation
+  case class Create(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity]) extends Mutation {
+    val operation = "create"
+  }
 
   case class GetTask(taskId: String) extends TaskProtocol
   case class TaskStatus(taskId: String, history: List[Log], warnings: Set[Warn], mutations: Set[Mutation],
