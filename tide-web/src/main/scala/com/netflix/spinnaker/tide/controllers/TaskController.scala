@@ -3,8 +3,8 @@ package com.netflix.spinnaker.tide.controllers
 import akka.actor.ActorRef
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
-import com.netflix.spinnaker.tide.actor.aws.DeepCopyActor.{GetDeepCopyStatus, DeepCopyStatus}
-import com.netflix.spinnaker.tide.actor.aws.DeepCopyDirector.GetAllDeepCopyTasks
+import com.netflix.spinnaker.tide.actor.aws.TaskActor.{GetTask, TaskStatus}
+import com.netflix.spinnaker.tide.actor.aws.TaskDirector.GetRunningTasks
 import com.netflix.spinnaker.tide.actor.aws._
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RequestMethod._
@@ -20,19 +20,19 @@ class TaskController @Autowired()(private val clusterSharding: ClusterSharding) 
 
   implicit val timeout = Timeout(5 seconds)
 
-  def deepCopyDirector: ActorRef = {
-    clusterSharding.shardRegion(DeepCopyDirector.typeName)
+  def taskDirector: ActorRef = {
+    clusterSharding.shardRegion(TaskDirector.typeName)
   }
 
   @RequestMapping(value = Array("/{id}"), method = Array(GET))
-  def getTask(@PathVariable("id") id: String): DeepCopyStatus = {
-    val future = (deepCopyDirector ? GetDeepCopyStatus(id)).mapTo[DeepCopyStatus]
+  def getTask(@PathVariable("id") id: String): TaskStatus = {
+    val future = (taskDirector ? GetTask(id)).mapTo[TaskStatus]
     Await.result(future, timeout.duration)
   }
 
   @RequestMapping(value = Array("/list"), method = Array(GET))
-  def getRunningTaskIds(): Set[String] = {
-    val future = (deepCopyDirector ? GetAllDeepCopyTasks()).mapTo[Set[String]]
+  def getRunningTaskIds: Set[String] = {
+    val future = (taskDirector ? GetRunningTasks()).mapTo[Set[String]]
     Await.result(future, timeout.duration)
   }
 

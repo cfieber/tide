@@ -40,7 +40,24 @@ object CloudDriverService {
                         startTimeMs: Long,
                         status: Status,
                         history: List[LogMessage],
-                        resultObjects: List[Map[String, Any]])
+                        resultObjects: List[Map[String, Any]]) {
+    def getCreatedServerGroups: List[String] = {
+      if (!status.completed) { return Nil }
+      val resultName = "serverGroupNames"
+      var newServerGroupNames: List[String] = Nil
+      val resultMapOption: Option[Map[String, Any]] = resultObjects.find(_.contains(resultName))
+      resultMapOption.foreach { resultMap =>
+        val resultOption = resultMap.get(resultName)
+        resultOption.foreach { result =>
+          val resultList = result.asInstanceOf[List[String]]
+          val resultParts = resultList.head.split(":")
+          val serverGroupName: String = resultParts(1)
+          newServerGroupNames ::= serverGroupName
+        }
+      }
+      newServerGroupNames
+    }
+  }
 
   case class Status(phase: String,
                     status: String,

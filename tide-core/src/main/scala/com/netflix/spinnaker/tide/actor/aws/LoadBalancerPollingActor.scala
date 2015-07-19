@@ -17,42 +17,37 @@
 package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{Props, ActorRef}
+import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, LoadBalancerLatestState}
+import com.netflix.spinnaker.tide.actor.aws.SecurityGroupPollingActor.GetSecurityGroupIdToNameMappings
+import com.netflix.spinnaker.tide.actor.aws.SubnetPollingActor.GetSubnets
+import akka.pattern.ask
+import com.netflix.spinnaker.tide.actor.aws.VpcPollingActor.GetVpcs
+import scala.concurrent.duration.DurationInt
+
+import scala.concurrent.Await
 
 class LoadBalancerPollingActor extends PollingActor {
+  implicit val timeout = Timeout(5 seconds)
 
-  var securityGroupIdToName: Map[String, SecurityGroupIdentity] = Map()
   var subnets: List[Subnet] = _
 
   override def poll() = {
-      val subnets = eddaService.subnets
-      val loadBalancers = eddaService.loadBalancers
-      eddaService.securityGroups.foreach { securityGroup =>
-        securityGroupIdToName += (securityGroup.groupId -> securityGroup.identity)
-      }
-      loadBalancers.foreach { loadBalancer =>
-        val securityGroupNames = loadBalancer.state.securityGroups.map{ securityGroupName =>
-          if (securityGroupName.startsWith("sg-")) {
-            securityGroupIdToName.get(securityGroupName) match {
-              case None => securityGroupName
-              case Some(identity) => identity.groupName
-            }
-          } else {
-            securityGroupName
-          }
-        }
-        var normalizedState = loadBalancer.state.copy(securityGroups = securityGroupNames)
-        loadBalancer.state.subnets.headOption.foreach { subnetId =>
-          val subnetOption = subnets.find(_.subnetId == subnetId)
-          subnetOption.foreach { subnet =>
-            normalizedState = normalizedState.copy(subnetType = Option(subnet.subnetType), vpcId = Option(subnet.vpcId))
-          }
-        }
-        val latestState = LoadBalancerLatestState(normalizedState)
-        resourceCluster(LoadBalancerActor.typeName) ! AwsResourceProtocol(AwsReference(AwsLocation(account, region),
-          loadBalancer.identity), latestState, Option(cloudDriver))
-      }
+    val vpcsFuture = (getShardCluster(VpcPollingActor.typeName) ? GetVpcs(account, region)).mapTo[List[Vpc]]
+    val subnetsFuture = (getShardCluster(SubnetPollingActor.typeName) ? GetSubnets(account, region)).mapTo[List[Subnet]]
+    val securityGroupsFuture = (getShardCluster(SecurityGroupPollingActor.typeName) ? GetSecurityGroupIdToNameMappings(account, region)).mapTo[Map[String, SecurityGroupIdentity]]
+    val vpcs = Await.result(vpcsFuture, timeout.duration)
+    val subnets = Await.result(subnetsFuture, timeout.duration)
+    val securityGroupIdToName: Map[String, SecurityGroupIdentity] = Await.result(securityGroupsFuture, timeout.duration)
+    val loadBalancers = eddaService.loadBalancers
+    loadBalancers.foreach { loadBalancer =>
+      var normalizedState = loadBalancer.state.convertToSecurityGroupNames(securityGroupIdToName).
+        populateVpcAttributes(vpcs, subnets)
+      val reference = AwsReference(AwsLocation(account, region), loadBalancer.identity)
+      val latestState = LoadBalancerLatestState(normalizedState)
+      resourceCluster(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, latestState, Option(cloudDriver))
+    }
   }
 }
 

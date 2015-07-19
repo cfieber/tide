@@ -57,7 +57,7 @@ class ClusterTestActor() extends PersistentActor with ActorLogging {
 
 }
 
-sealed trait MessageProtocol
+sealed trait MessageProtocol extends Serializable
 
 object ClusterTestActor {
   val typeName: String = this.getClass.getCanonicalName

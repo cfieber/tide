@@ -19,7 +19,6 @@ package com.netflix.spinnaker.tide.api;
 import retrofit.http.GET;
 import retrofit.http.Headers;
 import retrofit.http.Path;
-import com.netflix.spinnaker.mahe.api.ClusterDetailResponse;
 
 public interface SpinnakerService {
 

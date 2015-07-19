@@ -103,7 +103,7 @@ object Listener {
 }
 
 case class CloneServerGroupOperation(application: String, stack: String, freeFormDetails: String,
-                                     subnetType: Option[String], vpcId: Option[String],
+                                     subnetType: Option[String], vpcName: Option[String],
                                      availabilityZones: Map[String, Set[String]], credentials: String,
                                      securityGroups: Set[String], loadBalancers: Set[String], capacity: Capacity,
                                      iamRole: String, keyPair: String, amiName: String, instanceType: String,
@@ -137,7 +137,7 @@ object CloneServerGroupOperation {
     }
 
     CloneServerGroupOperation(application, stack, detail,
-      autoScalingGroup.subnetType, autoScalingGroup.vpcId, availabilityZones,
+      autoScalingGroup.subnetType, autoScalingGroup.vpcName, availabilityZones,
       awsLocation.account, launchConfiguration.securityGroups, autoScalingGroup.loadBalancerNames, capacity,
       launchConfiguration.iamInstanceProfile, launchConfiguration.keyName, launchConfiguration.imageId,
       launchConfiguration.instanceType, launchConfiguration.associatePublicIpAddress, launchConfiguration.ramdiskId,

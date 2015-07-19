@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide.actor.aws
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
-import akka.persistence.PersistentActor
+import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
 import com.netflix.spinnaker.tide.api.UpsertSecurityGroupOperation
@@ -29,10 +29,9 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
 
   override def persistenceId: String = self.path.name
 
-  context.setReceiveTimeout(60 seconds)
   def scheduler = context.system.scheduler
   private implicit val dispatcher = context.dispatcher
-  var latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
+  var latestStateTimeout = scheduler.scheduleOnce(20 seconds, self, LatestStateTimeout)
 
   var awsReference: AwsReference[SecurityGroupIdentity] = _
   var cloudDriver: Option[ActorRef] = None
@@ -47,10 +46,17 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
         wrapper.event.asInstanceOf[SecurityGroupEvent], wrapper.cloudDriver)
 
     case LatestStateTimeout =>
-      latestState = None
-      desiredState.foreach(mutate)
+      if (latestState.isDefined) {
+        persist(ClearLatestState()) { it => updateState(it) }
+      } else {
+        context.parent ! Passivate(stopMessage = PoisonPill)
+      }
+      if (desiredState.isDefined) {
+        self ! MutateState()
+      }
 
-    case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
+    case event: MutateState =>
+      desiredState.foreach(mutate)
   }
 
   private def handleAwsResourceProtocol(newAwsReference: AwsReference[SecurityGroupIdentity], event: SecurityGroupEvent,
@@ -63,24 +69,18 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
     case event: UpsertSecurityGroup =>
       updateReferences(newAwsReference, newCloudDriverReference)
       if (desiredState != Option(event)) {
-        persist(event) { e =>
-          updateState(event)
-          desiredState.foreach(mutate)
-        }
+        persist(event) { e => updateState(event) }
       }
+      self ! MutateState()
 
     case event: SecurityGroupLatestState =>
       updateReferences(newAwsReference, newCloudDriverReference)
       latestStateTimeout.cancel()
-      latestStateTimeout = scheduler.scheduleOnce(60 seconds, self, LatestStateTimeout)
+      latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
       if (latestState != Option(event)) {
-        persist(event) { e =>
-          updateState(event)
-          desiredState.foreach(mutate)
-        }
-      } else {
-        desiredState.foreach(mutate)
+        persist(event) { e => updateState(event) }
       }
+      self ! MutateState()
   }
 
   private def mutate(upsertSecurityGroup: UpsertSecurityGroup) = {
@@ -94,12 +94,12 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
         }
       case Some(latest) =>
         if(UpsertSecurityGroupOperation.from(awsReference, latest.state) == UpsertSecurityGroupOperation.from(awsReference, upsertSecurityGroup.state)) {
-          desiredState = None
+          persist(ClearDesiredState())(it => updateState(it))
         } else {
-          if (upsertSecurityGroup.overwrite) {
+          if (upsertSecurityGroup.overwrite || latest.state.ipPermissions.isEmpty) {
             cloudDriver.foreach(_ ! AwsResourceProtocol(awsReference, upsertSecurityGroup))
           } else {
-            desiredState = None
+            persist(ClearDesiredState())(it => updateState(it))
           }
         }
     }
@@ -112,18 +112,23 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
     this.awsReference = awsReference
   }
 
-  private def updateState(event: AwsResourceEvent) = {
+  private def updateState(event: Any) = {
     event match {
       case event: UpsertSecurityGroup =>
         desiredState = Option(event)
       case event: SecurityGroupLatestState =>
         latestState = Option(event)
+      case event: ClearLatestState =>
+        latestState = None
+      case event: ClearDesiredState =>
+        desiredState = None
       case _ => Nil
     }
   }
 
   override def receiveRecover: Receive = {
-    case event: SecurityGroupEvent =>
+    case RecoveryCompleted => Nil
+    case event: Any =>
       updateState(event)
   }
 

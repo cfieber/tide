@@ -27,6 +27,10 @@ trait PollingActor extends PersistentActor with ActorLogging {
     super.preRestart(reason, message)
   }
 
+  def getShardCluster(name: String): ActorRef = {
+    ClusterSharding.get(context.system).shardRegion(name)
+  }
+
   def constructEddaService(): EddaService = {
     new EddaServiceBuilder().constructEddaService(account, region, eddaUrlTemplate.get)
   }
@@ -69,7 +73,7 @@ trait PollingActor extends PersistentActor with ActorLogging {
   }
 }
 
-sealed trait PollingProtocol
+sealed trait PollingProtocol extends Serializable
 
 object PollingActor {
   case class Poll() extends PollingProtocol
