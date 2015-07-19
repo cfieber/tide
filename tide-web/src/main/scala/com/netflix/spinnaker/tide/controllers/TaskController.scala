@@ -20,19 +20,19 @@ class TaskController @Autowired()(private val clusterSharding: ClusterSharding) 
 
   implicit val timeout = Timeout(5 seconds)
 
-  def deepCopyDirector: ActorRef = {
+  def taskDirector: ActorRef = {
     clusterSharding.shardRegion(TaskDirector.typeName)
   }
 
   @RequestMapping(value = Array("/{id}"), method = Array(GET))
   def getTask(@PathVariable("id") id: String): TaskStatus = {
-    val future = (deepCopyDirector ? GetTask(id)).mapTo[TaskStatus]
+    val future = (taskDirector ? GetTask(id)).mapTo[TaskStatus]
     Await.result(future, timeout.duration)
   }
 
   @RequestMapping(value = Array("/list"), method = Array(GET))
   def getRunningTaskIds: Set[String] = {
-    val future = (deepCopyDirector ? GetRunningTasks()).mapTo[Set[String]]
+    val future = (taskDirector ? GetRunningTasks()).mapTo[Set[String]]
     Await.result(future, timeout.duration)
   }
 

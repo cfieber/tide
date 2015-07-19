@@ -22,8 +22,11 @@ import akka.persistence.{RecoveryCompleted, PersistentActor}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.AwsResourceReference
-import com.netflix.spinnaker.tide.actor.aws.TaskActor.{TaskStatus, GetTask}
+import com.netflix.spinnaker.tide.actor.aws.DependencyCopyActor.DependencyCopyTask
+import com.netflix.spinnaker.tide.actor.aws.ServerGroupCloneActor.ServerGroupDeepCopyTask
+import com.netflix.spinnaker.tide.actor.aws.TaskActor._
 import com.netflix.spinnaker.tide.actor.aws.TaskDirector._
+import com.netflix.spinnaker.tide.actor.aws.TaskDirector.typeName
 import scala.concurrent.duration.DurationInt
 
 class TaskDirector extends PersistentActor with ActorLogging {
@@ -64,14 +67,15 @@ class TaskDirector extends PersistentActor with ActorLogging {
 
     case event: TaskDescription =>
       persist(event) { it =>
-        sender() ! TaskStatus(nextTaskId.toString, Nil, Nil, Nil)
-        updateState(it)
+        sender() ! TaskStatus(nextTaskId.toString, Nil, Set(), Set(), None)
         routeTask(it)
+        updateState(it)
       }
 
     case event: TaskComplete =>
       persist(event) { it =>
         updateState(it)
+        getShardCluster(TaskActor.typeName) ! event
       }
   }
 
@@ -107,32 +111,11 @@ object TaskDirector {
   type Ref = ActorRef
   val typeName: String = this.getClass.getCanonicalName
 
-  sealed trait TaskComplete extends TaskDirectorProtocol {
-    def taskId: String
-  }
-  case class TaskFailure(taskId: String, description: TaskDescription, message: String) extends TaskComplete
-  case class TaskSuccess(taskId: String, description: TaskDescription, result: TaskResult) extends TaskComplete
-  sealed trait TaskResult
-  case class ServerGroupCloneTaskResult(newServerGroupNames: Seq[String]) extends TaskResult
-  case class DependencyCopyTaskResult(securityGroupIdSourceToTarget: Map[String, String]) extends TaskResult
-
   case class GetRunningTasks() extends TaskDirectorProtocol
 
   case class ExecuteTask(taskId: String, awsResource: ActorRef, description: TaskDescription, isContinued: Boolean = false)
     extends TaskDirectorProtocol with AkkaClustered {
-    val akkaIdentifier: String = s"${description.akkaIdentifier}.$taskId"
-  }
-
-  sealed trait TaskDescription extends AkkaClustered
-  case class ServerGroupDeepCopyTask(source: AwsReference[AutoScalingGroupIdentity], target: VpcLocation)
-    extends TaskDescription {
-    val akkaIdentifier: String = s"ServerGroupDeepCopyTask.${source.akkaIdentifier}.${target.akkaIdentifier}"
-  }
-  case class DependencyCopyTask(source: VpcLocation,
-                                target: VpcLocation,
-                                requiredSecurityGroupNames: Set[String],
-                                sourceLoadBalancerNames: Set[String]) extends TaskDescription {
-    val akkaIdentifier: String = s"DependencyCopyTask.${source.akkaIdentifier}.${target.akkaIdentifier}"
+    val akkaIdentifier: String = s"${description.taskType}.$taskId"
   }
 
   def startCluster(clusterSharding: ClusterSharding) = {

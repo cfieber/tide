@@ -14,8 +14,9 @@ class TaskActor extends PersistentActor with ActorLogging {
 
   var taskId: String = _
   var history: List[Log] = Nil
-  var warnings: List[Warn] = Nil
-  var mutations: List[Mutation] = Nil
+  var warnings: Set[Warn] = Set()
+  var mutations: Set[Mutation] = Set()
+  var taskComplete: Option[TaskComplete] = _
 
   override def receiveCommand: Receive = {
     case event: Log =>
@@ -24,11 +25,14 @@ class TaskActor extends PersistentActor with ActorLogging {
     case event: Warn =>
       persist(event)(updateState(_))
 
-    case event: Create =>
+    case event: Mutation =>
+      persist(event)(updateState(_))
+
+    case event: TaskComplete =>
       persist(event)(updateState(_))
 
     case event: GetTask =>
-      sender() ! TaskStatus(taskId, history, warnings, mutations)
+      sender() ! TaskStatus(taskId, history, warnings, mutations, taskComplete)
 
   }
 
@@ -38,17 +42,22 @@ class TaskActor extends PersistentActor with ActorLogging {
       updateState(event)
   }
 
-  def updateState(event: TaskProtocol) = {
-    taskId = event.taskId
+  def updateState(event: Any) = {
     event match {
       case event: Log =>
+        taskId = event.taskId
         history ::= event
 
       case event: Warn =>
-        warnings ::= event
+        taskId = event.taskId
+        warnings += event
 
       case event: Create =>
-        mutations ::= event
+        taskId = event.taskId
+        mutations += event
+
+      case event: TaskComplete =>
+        taskComplete = Option(event)
     }
   }
 
@@ -69,12 +78,24 @@ object TaskActor {
   case class Create(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity]) extends Mutation
 
   case class GetTask(taskId: String) extends TaskProtocol
-  case class TaskStatus(taskId: String, history: List[Log], warnings: List[Warn], mutations: List[Mutation]) extends TaskProtocol
+  case class TaskStatus(taskId: String, history: List[Log], warnings: Set[Warn], mutations: Set[Mutation],
+                        taskComplete: Option[TaskComplete]) extends TaskProtocol
+
+  sealed trait TaskComplete extends TaskProtocol {
+    def taskId: String
+    def description: TaskDescription
+  }
+  case class TaskFailure(taskId: String, description: TaskDescription, message: String) extends TaskComplete
+  case class TaskSuccess(taskId: String, description: TaskDescription, result: TaskResult) extends TaskComplete
+  trait TaskResult
+  trait TaskDescription {
+    def taskType: String
+  }
 
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(
       typeName = typeName,
-      entryProps = Some(Props[ServerGroupCloneActor]),
+      entryProps = Some(Props[TaskActor]),
       idExtractor = {
         case msg: TaskProtocol =>
           (msg.taskId, msg)

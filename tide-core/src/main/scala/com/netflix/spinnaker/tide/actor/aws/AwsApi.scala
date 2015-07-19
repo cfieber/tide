@@ -106,7 +106,7 @@ object AwsApi {
     sourceSubnetType.map{ subnetType =>
       val cleanSubnetType = subnetType.replaceAll("DEPRECATED_", "").replaceAll("-elb", "").replaceAll("-ec2", "")
       targetVpcName match {
-        case Some(vpcName) => s"${cleanSubnetType.split(" ").head} ($targetVpcName)"
+        case Some(vpcName) => s"${cleanSubnetType.split(" ").head} ($vpcName)"
         case None => s"${cleanSubnetType.split(" ").head}"
       }
     }
@@ -129,7 +129,7 @@ object AwsApi {
                                availabilityZones: Set[String],
                                healthCheck: HealthCheck, listenerDescriptions: Set[ListenerDescription],
                                scheme: String, securityGroups: Set[String],
-                               sourceSecurityGroup: SourceSecurityGroup, subnets: Set[String],
+                               sourceSecurityGroup: ElbSourceSecurityGroup, subnets: Set[String],
                                subnetType: Option[String]) {
 
     def forVpc(vpcName: Option[String], vpcId: Option[String]): LoadBalancerState = {
@@ -161,7 +161,7 @@ object AwsApi {
   case class Listener(SSLCertificateId: Option[String], instancePort: Int, instanceProtocol: String, loadBalancerPort: Int,
                       protocol: String)
 
-  case class SourceSecurityGroup(groupName: String, ownerAlias: String)
+  case class ElbSourceSecurityGroup(groupName: String, ownerAlias: String)
 
   case class LaunchConfiguration(@JsonUnwrapped @JsonProperty("identity") identity: LaunchConfigurationIdentity,
                                  @JsonUnwrapped @JsonProperty("state") state: LaunchConfigurationState)

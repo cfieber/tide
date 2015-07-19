@@ -22,7 +22,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
-import com.netflix.spinnaker.tide.actor.aws.ServerGroupCloneActor.CloneServerGroupTask
 import scala.concurrent.duration.DurationInt
 
 class AwsResourceActor(private val cloudDriver: CloudDriverActor.Ref) extends Actor with ActorLogging {

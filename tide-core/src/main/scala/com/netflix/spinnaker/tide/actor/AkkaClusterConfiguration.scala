@@ -45,6 +45,8 @@ class AkkaClusterConfiguration {
     ServerGroupPollingActor.startCluster(clusterSharding)
 
     ServerGroupCloneActor.startCluster(clusterSharding)
+    DependencyCopyActor.startCluster(clusterSharding)
+
     TaskDirector.startCluster(clusterSharding)
     TaskActor.startCluster(clusterSharding)
   }

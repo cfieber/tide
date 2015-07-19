@@ -28,6 +28,9 @@ class SecurityGroupPollingActor extends PollingActor {
 
   override def receiveCommand: Receive = {
     case event: GetSecurityGroupIdToNameMappings =>
+      if (!Option(securityGroupIdToName).isDefined) {
+        poll()
+      }
       sender() ! securityGroupIdToName
     case event =>
       super.receiveCommand(event)

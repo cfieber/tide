@@ -7,9 +7,8 @@ import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
 import com.netflix.spinnaker.tide.actor.aws.DependencyCopyActor._
-import com.netflix.spinnaker.tide.actor.aws.TaskActor.{Create, Log}
+import com.netflix.spinnaker.tide.actor.aws.TaskActor._
 import com.netflix.spinnaker.tide.actor.aws.TaskDirector._
-import com.netflix.spinnaker.tide.actor.aws.TaskDirector.typeName
 import com.netflix.spinnaker.tide.actor.aws.VpcPollingActor.GetVpcs
 import akka.pattern.ask
 import scala.concurrent.Await
@@ -23,7 +22,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   private implicit val dispatcher = context.dispatcher
   def scheduler = context.system.scheduler
   private var checkForCreatedResources: Cancellable = _
-  override def postStop(): Unit = checkForCreatedResources.cancel()
+//  override def postStop(): Unit = checkForCreatedResources.cancel()
 
   var orchestrator: ActorRef = _
   var awsResource: ActorRef = _
@@ -68,7 +67,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         val targetVpc = vpcs.find(_.name == task.target.vpcName).map(_.vpcId)
         self ! VpcIds(sourceVpc, targetVpc)
         task.requiredSecurityGroupNames.foreach(it => self ! Requires(SecurityGroupIdentity(it)))
-        task.sourceLoadBalancerNames.foreach(it => self ! Requires(LoadBalancerIdentity(it).forVpc(task.target.vpcName)))
+        task.sourceLoadBalancerNames.foreach(it => self ! Requires(LoadBalancerIdentity(it)))
       }
 
     case event: VpcIds =>
@@ -122,14 +121,14 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               awsResource ! AwsResourceProtocol(AwsReference(task.source.location,
                 SecurityGroupIdentity(name, vpcIds.source)), GetSecurityGroup(), None)
             case Some(latestState) =>
-              securityGroupNameToTargetId += (name -> latestState.securityGroupId)
+              persist(TargetSecurityGroup(name, latestState.securityGroupId))(it => updateState(it))
               self ! Found(SecurityGroupIdentity(name))
           }
         case Source =>
           event.latestState match {
             case None => Nil
             case Some(latestState) =>
-              securityGroupNameToSourceId += (name -> latestState.securityGroupId)
+              persist(SourceSecurityGroup(name, latestState.securityGroupId))(it => updateState(it))
               latestState.state.ipPermissions.foreach { ipPermission =>
                 ipPermission.userIdGroupPairs.foreach { userIdGroupPair =>
                   self ! Requires(SecurityGroupIdentity(userIdGroupPair.groupName.get))
@@ -137,7 +136,6 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               }
               val upsert = UpsertSecurityGroup(latestState.state, overwrite = false)
               val referenceToUpsert = AwsReference(task.target.location, SecurityGroupIdentity(name, vpcIds.target))
-              getShardCluster(TaskActor.typeName) ! Log(taskId, s"Creating Security Group ${referenceToUpsert.akkaIdentifier}")
               getShardCluster(TaskActor.typeName) ! Create(taskId, referenceToUpsert)
               awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
           }
@@ -149,8 +147,9 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       event.latestState match {
         case None =>
           if (identity.isConsistentWithVpc(task.target.vpcName)) {
-            awsResource ! AwsResourceProtocol(AwsReference(task.source.location,
-              LoadBalancerIdentity(loadBalancerNameTargetToSource(name))), GetLoadBalancer(), None)
+            val sourceLoadBalancerName = loadBalancerNameTargetToSource(name)
+            val reference = AwsReference(task.source.location, LoadBalancerIdentity(sourceLoadBalancerName))
+            awsResource ! AwsResourceProtocol(reference, GetLoadBalancer(), None)
           }
         case Some(latestState) =>
           val Source = QualifiedVpcId(task.source.location, vpcIds.source)
@@ -163,8 +162,6 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               val upsert = UpsertLoadBalancer(latestState.state.forVpc(task.target.vpcName, vpcIds.target), overwrite = false)
               val targetLoadBalancer = identity.forVpc(task.target.vpcName)
               val referenceToUpsert = AwsReference(task.target.location, targetLoadBalancer)
-              persist(LoadBalancerNames(name, targetLoadBalancer.loadBalancerName))(updateState(_))
-              getShardCluster(TaskActor.typeName) ! Log(taskId, s"Creating Load Balancer ${referenceToUpsert.akkaIdentifier}")
               getShardCluster(TaskActor.typeName) ! Create(taskId, referenceToUpsert)
               awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
           }
@@ -183,14 +180,23 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         isComplete = false
       case event: VpcIds =>
         vpcIds = event
-      case event: LoadBalancerNames =>
-        loadBalancerNameTargetToSource += (event.target -> event.source)
       case event: TaskComplete =>
         isComplete = true
       case Requires(identity: AwsIdentity) =>
-        resourcesRequired += identity
+        identity match {
+          case sourceIdentity: LoadBalancerIdentity =>
+            val targetIdentity = sourceIdentity.forVpc(task.target.vpcName)
+            resourcesRequired += targetIdentity
+            loadBalancerNameTargetToSource += (targetIdentity.loadBalancerName -> sourceIdentity.loadBalancerName)
+          case _ =>
+            resourcesRequired += identity
+        }
       case Found(identity: AwsIdentity) =>
         resourcesFound += identity
+      case event: SourceSecurityGroup =>
+        securityGroupNameToSourceId += (event.name -> event.id)
+      case event: TargetSecurityGroup =>
+        securityGroupNameToTargetId += (event.name -> event.id)
       case _ => Nil
     }
   }
@@ -219,7 +225,8 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         awsResource ! AwsResourceProtocol(AwsReference(task.target.location, identity.copy(vpcId = vpcIds.target)),
           GetSecurityGroup(), None)
       case identity: LoadBalancerIdentity =>
-        awsResource ! AwsResourceProtocol(AwsReference(task.target.location, identity), GetLoadBalancer(), None)
+        awsResource ! AwsResourceProtocol(AwsReference(task.target.location, identity.forVpc(task.target.vpcName)),
+          GetLoadBalancer(), None)
     }
   }
 
@@ -231,11 +238,20 @@ object DependencyCopyActor {
   type Ref = ActorRef
   val typeName: String = this.getClass.getCanonicalName
 
-  case class VpcIds(source: Option[String], target: Option[String])
-  case class LoadBalancerNames(source: String, target: String)
+  case class DependencyCopyTaskResult(securityGroupIdSourceToTarget: Map[String, String]) extends TaskResult with DependencyCopyProtocol
+  case class DependencyCopyTask(source: VpcLocation,
+                                target: VpcLocation,
+                                requiredSecurityGroupNames: Set[String],
+                                sourceLoadBalancerNames: Set[String]) extends TaskDescription with DependencyCopyProtocol {
+    val taskType: String = "DependencyCopyTask"
+  }
+  case class VpcIds(source: Option[String], target: Option[String]) extends DependencyCopyProtocol
   case class CheckCompletion() extends DependencyCopyProtocol
   case class Requires(awsIdentity: AwsIdentity) extends DependencyCopyProtocol
   case class Found(awsIdentity: AwsIdentity) extends DependencyCopyProtocol
+
+  case class SourceSecurityGroup(name: String, id: String) extends DependencyCopyProtocol
+  case class TargetSecurityGroup(name: String, id: String) extends DependencyCopyProtocol
 
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(

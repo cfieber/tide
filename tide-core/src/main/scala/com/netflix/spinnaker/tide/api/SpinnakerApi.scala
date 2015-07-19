@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.netflix.spinnaker.mahe.api
+package com.netflix.spinnaker.tide.api
 
 import com.fasterxml.jackson.annotation.JsonProperty
 

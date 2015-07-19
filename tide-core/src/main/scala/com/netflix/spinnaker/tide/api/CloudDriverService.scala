@@ -16,7 +16,6 @@
 
 package com.netflix.spinnaker.tide.api
 
-import com.netflix.spinnaker.tide.actor.aws.TaskDirector.{ServerGroupCloneTaskResult, TaskSuccess}
 import com.netflix.spinnaker.tide.api.CloudDriverService.{TaskReference, TaskDetail}
 import retrofit.http._
 
