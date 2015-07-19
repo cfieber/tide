@@ -20,6 +20,7 @@ import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import akka.util.Timeout
+import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
 import com.netflix.spinnaker.tide.actor.aws.AwsApi.{AutoScalingGroupIdentity, AwsReference, VpcLocation}
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
 import com.netflix.spinnaker.tide.actor.aws.CloudDriverActor.{GetTaskDetail, CloudDriverResponse}
@@ -102,7 +103,7 @@ class ServerGroupCloneActor() extends PersistentActor with ActorLogging {
         } else {
           val sourceVpcLocation = VpcLocation(task.source.location, latestState.autoScalingGroup.vpcName)
           val dependencyCopyTask = DependencyCopyTask(sourceVpcLocation, task.target, requiredSecurityGroups,
-            sourceLoadBalancerNames)
+            sourceLoadBalancerNames, dryRun = task.dryRun)
           getShardCluster(DependencyCopyActor.typeName) ! ExecuteTask(taskId, awsResource, dependencyCopyTask)
         }
       }
@@ -113,13 +114,19 @@ class ServerGroupCloneActor() extends PersistentActor with ActorLogging {
         val newAutoScalingGroup = autoScalingGroup.forVpc(task.target.vpcName).withCapacity(0)
         val cloneServerGroup = AwsResourceProtocol(task.source,
           CloneServerGroup(newAutoScalingGroup, serverGroupState.get.launchConfiguration, startDisabled = true))
-        val future = (awsResource ? cloneServerGroup).mapTo[CloudDriverResponse]
-        getShardCluster(TaskActor.typeName) ! Log(taskId, s"Cloning Server Group ${task.source.akkaIdentifier}")
-        val cloudDriverResponse = Await.result(future, timeout.duration)
-        persist(CloudDriverTaskReference(cloudDriverResponse.taskDetail.id, cloudDriverResponse.cloudDriverReference)) { it =>
-          updateState(it)
-          cloneServerGroupTaskReference.foreach { taskReference =>
-            scheduler.scheduleOnce(15 seconds, taskReference.actorRef, GetTaskDetail(taskReference.taskId))
+        if (task.dryRun) {
+          val nextAsgIdentity = task.source.identity.nextGroup
+          getShardCluster(TaskActor.typeName) ! Create(taskId, AwsReference(task.target.location, nextAsgIdentity))
+          self ! TaskSuccess(taskId, task, ServerGroupCloneTaskResult(Seq(nextAsgIdentity.autoScalingGroupName)))
+        } else {
+          getShardCluster(TaskActor.typeName) ! Log(taskId, s"Cloning Server Group ${task.source.akkaIdentifier}")
+          val future = (awsResource ? cloneServerGroup).mapTo[CloudDriverResponse]
+          val cloudDriverResponse = Await.result(future, timeout.duration)
+          persist(CloudDriverTaskReference(cloudDriverResponse.taskDetail.id, cloudDriverResponse.cloudDriverReference)) { it =>
+            updateState(it)
+            cloneServerGroupTaskReference.foreach { taskReference =>
+              scheduler.scheduleOnce(15 seconds, taskReference.actorRef, GetTaskDetail(taskReference.taskId))
+            }
           }
         }
       } else {
@@ -138,6 +145,10 @@ class ServerGroupCloneActor() extends PersistentActor with ActorLogging {
               self ! TaskFailure(taskId, task, taskDetail.status.status)
             } else {
               self ! TaskSuccess(taskId, task, ServerGroupCloneTaskResult(taskDetail.getCreatedServerGroups))
+              taskDetail.getCreatedServerGroups.foreach { groupName =>
+                val reference = AwsReference(task.target.location, AutoScalingGroupIdentity(groupName))
+                getShardCluster(TaskActor.typeName) ! Create(taskId, reference)
+              }
             }
           } else {
             scheduler.scheduleOnce(15 seconds, event.cloudDriverReference, GetTaskDetail(event.taskDetail.id))
@@ -176,7 +187,8 @@ object ServerGroupCloneActor {
   val typeName: String = this.getClass.getCanonicalName
 
   case class ServerGroupCloneTaskResult(newServerGroupNames: Seq[String]) extends TaskResult with ServerGroupCloneProtocol
-  case class ServerGroupDeepCopyTask(source: AwsReference[AutoScalingGroupIdentity], target: VpcLocation)
+  case class ServerGroupDeepCopyTask(source: AwsReference[AutoScalingGroupIdentity], target: VpcLocation,
+                                     dryRun: Boolean = false)
     extends TaskDescription with ServerGroupCloneProtocol {
     val taskType: String = "ServerGroupDeepCopyTask"
   }
