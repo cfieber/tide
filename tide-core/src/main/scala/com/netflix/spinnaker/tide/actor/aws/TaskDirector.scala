@@ -67,7 +67,8 @@ class TaskDirector extends PersistentActor with ActorLogging {
 
     case event: TaskDescription =>
       persist(event) { it =>
-        sender() ! TaskStatus(nextTaskId.toString, Nil, Set(), Set(), None)
+        sender() ! TaskStatus(nextTaskId.toString, event, Nil, Set(), Set(), None)
+        getShardCluster(TaskActor.typeName) ! TaskInit(nextTaskId.toString, event)
         routeTask(it)
         updateState(it)
       }

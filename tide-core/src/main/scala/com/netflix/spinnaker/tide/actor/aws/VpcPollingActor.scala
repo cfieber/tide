@@ -31,9 +31,6 @@ class VpcPollingActor extends PollingActor {
 
   override def receiveCommand: Receive = {
     case event: GetVpcs =>
-      if (!Option(vpcs).isDefined) {
-        poll()
-      }
       sender() ! vpcs
     case event =>
       super.receiveCommand(event)
