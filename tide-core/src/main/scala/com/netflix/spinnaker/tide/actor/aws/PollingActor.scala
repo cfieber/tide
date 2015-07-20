@@ -47,6 +47,9 @@ trait PollingActor extends PersistentActor with ActorLogging {
       }
 
     case event: Poll =>
+      if (!Option(eddaService).isDefined) {
+        eddaService = constructEddaService()
+      }
       poll()
   }
 

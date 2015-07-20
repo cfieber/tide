@@ -11,9 +11,6 @@ class SubnetPollingActor extends PollingActor {
 
   override def receiveCommand: Receive = {
     case event: GetSubnets =>
-      if (!Option(subnets).isDefined) {
-        poll()
-      }
       sender() ! subnets
     case event =>
       super.receiveCommand(event)

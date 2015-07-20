@@ -42,8 +42,8 @@ class EddaConfig {
 
   @PostConstruct
   def startPollingEdda(): Unit = {
-    val pollers: Seq[PollingActorObject] =Seq(SecurityGroupPollingActor, LoadBalancerPollingActor,
-      ServerGroupPollingActor, VpcPollingActor, SubnetPollingActor)
+    val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, SubnetPollingActor,
+      SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
     val accounts = eddaSettings.getAccountToRegionsMapping.keySet()
     for (account <- accounts) {
       val regions: java.util.List[String] = eddaSettings.getAccountToRegionsMapping.get(account)
