@@ -13,12 +13,16 @@ class TaskActor extends PersistentActor with ActorLogging {
   override def persistenceId: String = self.path.name
 
   var taskId: String = _
+  var taskDescription: TaskDescription = _
   var history: List[Log] = Nil
   var warnings: Set[Warn] = Set()
   var mutations: Set[Mutation] = Set()
   var taskComplete: Option[TaskComplete] = _
 
   override def receiveCommand: Receive = {
+    case event: TaskInit =>
+      persist(event)(updateState(_))
+
     case event: Log =>
       persist(event.copy(timeStamp = new Date().getTime))(updateState(_))
 
@@ -32,7 +36,7 @@ class TaskActor extends PersistentActor with ActorLogging {
       persist(event)(updateState(_))
 
     case event: GetTask =>
-      sender() ! TaskStatus(taskId, history, warnings, mutations, taskComplete)
+      sender() ! TaskStatus(taskId, taskDescription, history, warnings, mutations, taskComplete)
 
   }
 
@@ -44,6 +48,9 @@ class TaskActor extends PersistentActor with ActorLogging {
 
   def updateState(event: Any) = {
     event match {
+      case event: TaskInit =>
+        taskDescription = event.description
+
       case event: Log =>
         taskId = event.taskId
         history ::= event
@@ -80,7 +87,7 @@ object TaskActor {
   }
 
   case class GetTask(taskId: String) extends TaskProtocol
-  case class TaskStatus(taskId: String, history: List[Log], warnings: Set[Warn], mutations: Set[Mutation],
+  case class TaskStatus(taskId: String, taskDescription: TaskDescription, history: List[Log], warnings: Set[Warn], mutations: Set[Mutation],
                         taskComplete: Option[TaskComplete]) extends TaskProtocol
 
   sealed trait TaskComplete extends TaskProtocol {
@@ -93,6 +100,7 @@ object TaskActor {
   trait TaskDescription {
     def taskType: String
   }
+  case class TaskInit(taskId: String, description: TaskDescription) extends TaskProtocol
 
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(
