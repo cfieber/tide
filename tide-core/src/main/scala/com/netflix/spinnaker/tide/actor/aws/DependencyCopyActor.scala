@@ -39,6 +39,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   var resourcesRequired: Set[AwsIdentity] = Set()
   var resourcesFound: Set[AwsIdentity] = Set()
   var loadBalancerNameTargetToSource: Map[String, String] = Map()
+  var securityGroupNameTargetToSource: Map[String, String] = Map()
   var cloudDriverReference: Option[ActorRef] = None
   var isComplete = false
 
@@ -122,8 +123,9 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         case Target =>
           event.latestState match {
             case None =>
+              val sourcesecurityGroupName = securityGroupNameTargetToSource(name)
               awsResource ! AwsResourceProtocol(AwsReference(task.source.location,
-                SecurityGroupIdentity(name, vpcIds.source)), GetSecurityGroup(), None)
+                SecurityGroupIdentity(sourcesecurityGroupName, vpcIds.source)), GetSecurityGroup(), None)
             case Some(latestState) =>
               persist(TargetSecurityGroup(name, latestState.securityGroupId))(it => updateState(it))
               self ! Found(SecurityGroupIdentity(name))
@@ -138,10 +140,11 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
                   self ! Requires(SecurityGroupIdentity(userIdGroupPair.groupName.get))
                 }
               }
-              val referenceToUpsert = AwsReference(task.target.location, SecurityGroupIdentity(name, vpcIds.target))
+              val targetSecurityGroup = SecurityGroupIdentity(name, vpcIds.target).dropLegacySuffix
+              val referenceToUpsert = AwsReference(task.target.location, targetSecurityGroup)
               getShardCluster(TaskActor.typeName) ! Create(taskId, referenceToUpsert)
               if (task.dryRun) {
-                self ! Found(SecurityGroupIdentity(name))
+                self ! Found(SecurityGroupIdentity(targetSecurityGroup.groupName))
               } else {
                 val upsert = UpsertSecurityGroup(latestState.state, overwrite = false)
                 awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
@@ -200,6 +203,10 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
             val targetIdentity = sourceIdentity.forVpc(task.target.vpcName)
             resourcesRequired += targetIdentity
             loadBalancerNameTargetToSource += (targetIdentity.loadBalancerName -> sourceIdentity.loadBalancerName)
+          case sourceIdentity: SecurityGroupIdentity =>
+            val targetIdentity = sourceIdentity.dropLegacySuffix
+            resourcesRequired += targetIdentity
+            securityGroupNameTargetToSource += (targetIdentity.groupName -> sourceIdentity.groupName)
           case _ =>
             resourcesRequired += identity
         }
