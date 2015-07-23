@@ -46,6 +46,13 @@ object AwsApi {
 
   case class SecurityGroupIdentity(groupName: String, vpcId: Option[String] = None) extends AwsIdentity {
     @JsonIgnore val akkaIdentifier: String = s"SecurityGroup.$groupName.${vpcId.getOrElse("")}"
+    def dropLegacySuffix: SecurityGroupIdentity = {
+      val newGroupName = groupName match {
+          case s if s.endsWith("-vpc") => s"${s.dropRight("-vpc".length)}"
+          case s => groupName
+        }
+      SecurityGroupIdentity(newGroupName, vpcId)
+    }
   }
 
   case class SecurityGroupState(description: String, ipPermissions: Set[IpPermission]) {
@@ -179,6 +186,11 @@ object AwsApi {
                                       securityGroups: Set[String], spotPrice: Option[String]) {
     def convertToSecurityGroupNames(securityGroupIdToName: Map[String, SecurityGroupIdentity]): LaunchConfigurationState = {
       copy(securityGroups = normalizeSecurityGroupNames(securityGroups, securityGroupIdToName))
+    }
+
+    def dropSecurityGroupNameLegacySuffixes: LaunchConfigurationState = {
+      val newSecurityGroups = securityGroups.map(SecurityGroupIdentity(_).dropLegacySuffix.groupName)
+      copy(securityGroups = newSecurityGroups)
     }
   }
 

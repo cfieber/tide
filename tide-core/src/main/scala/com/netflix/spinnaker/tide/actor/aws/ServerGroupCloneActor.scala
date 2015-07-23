@@ -110,10 +110,10 @@ class ServerGroupCloneActor() extends PersistentActor with ActorLogging {
 
     case event: StartServerGroupCloning =>
       if (!cloneServerGroupTaskReference.isDefined) {
-        val autoScalingGroup = serverGroupState.get.autoScalingGroup
-        val newAutoScalingGroup = autoScalingGroup.forVpc(task.target.vpcName).withCapacity(0)
+        val newAutoScalingGroup = serverGroupState.get.autoScalingGroup.forVpc(task.target.vpcName).withCapacity(0)
+        val newLaunchConfiguration = serverGroupState.get.launchConfiguration.dropSecurityGroupNameLegacySuffixes
         val cloneServerGroup = AwsResourceProtocol(task.source,
-          CloneServerGroup(newAutoScalingGroup, serverGroupState.get.launchConfiguration, startDisabled = true))
+          CloneServerGroup(newAutoScalingGroup, newLaunchConfiguration, startDisabled = true))
         if (task.dryRun) {
           val nextAsgIdentity = task.source.identity.nextGroup
           getShardCluster(TaskActor.typeName) ! Create(taskId, AwsReference(task.target.location, nextAsgIdentity))
