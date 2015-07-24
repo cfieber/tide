@@ -25,17 +25,15 @@ import scala.beans.BeanProperty
 object AwsApi {
 
   case class AwsLocation(account: String, region: String) extends AkkaClustered {
-    @JsonIgnore val akkaIdentifier = s"$account.$region"
+    @JsonIgnore override val akkaIdentifier = s"$account.$region"
   }
 
-  case class VpcLocation(@JsonUnwrapped location: AwsLocation, vpcName: Option[String]) extends AkkaClustered {
-    @JsonIgnore val akkaIdentifier = s"${location.akkaIdentifier}.${vpcName.getOrElse("")}"
-  }
+  case class VpcLocation(@JsonUnwrapped location: AwsLocation, vpcName: Option[String])
 
   trait AwsIdentity extends AkkaClustered
 
   case class AwsReference[T <: AwsIdentity](location: AwsLocation, identity: T) extends AkkaClustered {
-    @JsonIgnore val akkaIdentifier = s"${location.akkaIdentifier}.${identity.akkaIdentifier}"
+    @JsonIgnore override val akkaIdentifier = s"${location.akkaIdentifier}.${identity.akkaIdentifier}"
   }
 
   case class Tag(key: String, value: String)

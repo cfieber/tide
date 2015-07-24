@@ -37,7 +37,7 @@ class TaskDirector extends PersistentActor with ActorLogging {
 
   var awsResource: AwsResourceActor.Ref = _
 
-  var currentTasksById: Map[String, TaskDescription] = Map()
+  var currentExecutionsByTaskId: Map[String, ExecuteTask] = Map()
 
   var nextTaskId: Long = 1
 
@@ -49,8 +49,9 @@ class TaskDirector extends PersistentActor with ActorLogging {
     case event: AwsResourceReference =>
       awsResource = event.awsResource
       context become directTasks
-      currentTasksById.foreach {
-        case (id, task) => routeTask(task, isContinued = true, id)
+      currentExecutionsByTaskId.foreach {
+        case (id, executeTask) =>
+          getShardCluster(executeTask.description.executionActorTypeName) ! ContinueTask(executeTask.copy(cloudResourceRef = awsResource))
       }
     case event => Nil
   }
@@ -60,23 +61,36 @@ class TaskDirector extends PersistentActor with ActorLogging {
       awsResource = event.awsResource
 
     case event: GetRunningTasks =>
-      sender() ! currentTasksById.keySet
+      sender() ! currentExecutionsByTaskId.keySet
 
     case event: GetTask =>
       getShardCluster(TaskActor.typeName) forward event
 
-    case event: TaskDescription =>
-      persist(event) { it =>
-        sender() ! TaskStatus(nextTaskId.toString, event, Nil, Set(), Set(), None)
-        getShardCluster(TaskActor.typeName) ! TaskInit(nextTaskId.toString, event)
-        routeTask(it)
-        updateState(it)
+    case taskDescription: TaskDescription =>
+      val executeTask = ExecuteTask(nextTaskId.toString, awsResource, taskDescription)
+      self ! executeTask
+      sender() ! executeTask
+
+    case executeTask: ExecuteTask =>
+      updateState(executeTask)
+      getShardCluster(executeTask.description.executionActorTypeName) ! executeTask
+      getShardCluster(TaskActor.typeName) ! executeTask
+
+    case childTasks: ChildTaskDescriptions =>
+      val taskCluster = getShardCluster(TaskActor.typeName)
+      val executeTasks: List[ExecuteTask] = childTasks.descriptions.map { taskDescription =>
+        val executeTask = ExecuteTask(nextTaskId.toString, awsResource, taskDescription, Option(childTasks.parentTaskId))
+        nextTaskId = nextTaskId + 1
+        self ! executeTask
+        executeTask
       }
+      val executeChildTasks = ExecuteChildTasks(childTasks.parentTaskId, executeTasks)
+      sender() ! executeChildTasks
+      taskCluster ! executeChildTasks
 
     case event: TaskComplete =>
       persist(event) { it =>
         updateState(it)
-        getShardCluster(TaskActor.typeName) ! event
       }
   }
 
@@ -86,22 +100,13 @@ class TaskDirector extends PersistentActor with ActorLogging {
       updateState(event)
   }
 
-  def routeTask(taskDescription: TaskDescription, isContinued: Boolean = false, id: String = nextTaskId.toString): Unit = {
-    taskDescription match {
-      case event : ServerGroupDeepCopyTask =>
-        getShardCluster(ServerGroupCloneActor.typeName) ! ExecuteTask(id, awsResource, taskDescription, isContinued)
-      case event : DependencyCopyTask =>
-        getShardCluster(DependencyCopyActor.typeName) ! ExecuteTask(id, awsResource, taskDescription, isContinued)
-    }
-  }
-
   def updateState(event: Any) = {
     event match {
-      case event: TaskDescription =>
-        currentTasksById += (nextTaskId.toString -> event)
-        nextTaskId = nextTaskId + 1
+      case event: ExecuteTask =>
+        currentExecutionsByTaskId += (event.taskId -> event)
+        nextTaskId = event.taskId.toInt + 1
       case event: TaskComplete =>
-        currentTasksById -= event.taskId
+        currentExecutionsByTaskId -= event.taskId
     }
   }
 }
@@ -113,11 +118,11 @@ object TaskDirector {
   val typeName: String = this.getClass.getCanonicalName
 
   case class GetRunningTasks() extends TaskDirectorProtocol
-
-  case class ExecuteTask(taskId: String, awsResource: ActorRef, description: TaskDescription, isContinued: Boolean = false)
-    extends TaskDirectorProtocol with AkkaClustered {
-    val akkaIdentifier: String = s"${description.taskType}.$taskId"
+  trait TaskDescription {
+    def taskType: String
+    def executionActorTypeName: String
   }
+  case class ChildTaskDescriptions(parentTaskId: String, descriptions: List[TaskDescription]) extends TaskDirectorProtocol
 
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(
