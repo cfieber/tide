@@ -245,8 +245,8 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   def checkForCreatedTargetResource(identity: AwsIdentity): Unit = {
     identity match {
       case identity: SecurityGroupIdentity =>
-        awsResource ! AwsResourceProtocol(AwsReference(task.target.location, identity.copy(vpcId = vpcIds.target)),
-          GetSecurityGroup(), None)
+        awsResource ! AwsResourceProtocol(AwsReference(task.target.location,
+          identity.dropLegacySuffix.copy(vpcId = vpcIds.target)), GetSecurityGroup(), None)
       case identity: LoadBalancerIdentity =>
         awsResource ! AwsResourceProtocol(AwsReference(task.target.location, identity.forVpc(task.target.vpcName)),
           GetLoadBalancer(), None)
