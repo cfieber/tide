@@ -20,6 +20,7 @@ import akka.actor._
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, SecurityGroupLatestState}
+import com.netflix.spinnaker.tide.actor.aws.PollingActor.PollingClustered
 import com.netflix.spinnaker.tide.actor.aws.SecurityGroupPollingActor.GetSecurityGroupIdToNameMappings
 
 class SecurityGroupPollingActor extends PollingActor {
@@ -52,8 +53,8 @@ object SecurityGroupPollingActor extends PollingActorObject {
   type Ref = ActorRef
   val props = Props[SecurityGroupPollingActor]
 
-  case class GetSecurityGroupIdToNameMappings(account: String, region: String) extends AkkaClustered {
-    @JsonIgnore val akkaIdentifier = s"$account.$region"
+  case class GetSecurityGroupIdToNameMappings(account: String, region: String) extends PollingClustered {
+    @JsonIgnore override val pollingIdentifier = s"$account.$region"
   }
 }
 

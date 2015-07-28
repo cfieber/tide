@@ -3,6 +3,7 @@ package com.netflix.spinnaker.tide.actor.aws
 import akka.actor.{Props, ActorRef}
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.netflix.spinnaker.tide.actor.aws.AwsApi.Subnet
+import com.netflix.spinnaker.tide.actor.aws.PollingActor.PollingClustered
 import com.netflix.spinnaker.tide.actor.aws.SubnetPollingActor.GetSubnets
 
 class SubnetPollingActor extends PollingActor {
@@ -25,8 +26,8 @@ object SubnetPollingActor extends PollingActorObject {
   type Ref = ActorRef
   val props = Props[SubnetPollingActor]
 
-  case class GetSubnets(account: String, region: String) extends AkkaClustered {
-    @JsonIgnore val akkaIdentifier = s"$account.$region"
+  case class GetSubnets(account: String, region: String) extends PollingClustered {
+    @JsonIgnore override val pollingIdentifier = s"$account.$region"
   }
 
 }

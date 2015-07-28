@@ -3,7 +3,7 @@ package com.netflix.spinnaker.tide.actor.aws
 import akka.actor.{Props, ActorRef, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
-import com.netflix.spinnaker.tide.actor.aws.PollingActor.{Poll, Start}
+import com.netflix.spinnaker.tide.actor.aws.PollingActor.{PollingClustered, Poll, Start}
 import com.netflix.spinnaker.tide.api.EddaService
 import scala.concurrent.duration.DurationInt
 
@@ -76,13 +76,18 @@ trait PollingActor extends PersistentActor with ActorLogging {
   }
 }
 
-sealed trait PollingProtocol extends Serializable
+trait PollingProtocol extends Serializable
 
 object PollingActor {
   case class Poll() extends PollingProtocol
+
+  trait PollingClustered extends PollingProtocol {
+    def pollingIdentifier: String
+  }
+
   case class Start(account: String, region: String, eddaUrlTemplate: String, cloudDriver: CloudDriverActor.Ref)
-    extends PollingProtocol with AkkaClustered {
-    override val akkaIdentifier: String = s"$account.$region"
+    extends PollingProtocol with PollingClustered {
+    override val pollingIdentifier: String = s"$account.$region"
   }
 }
 
@@ -95,12 +100,12 @@ trait PollingActorObject {
       typeName = typeName,
       entryProps = Some(props),
       idExtractor = {
-        case msg: AkkaClustered =>
-          (msg.akkaIdentifier, msg)
+        case msg: PollingClustered =>
+          (msg.pollingIdentifier, msg)
       },
       shardResolver = {
-        case msg: AkkaClustered =>
-          (msg.akkaIdentifier.hashCode % 10).toString
+        case msg: PollingClustered =>
+          (msg.pollingIdentifier.hashCode % 10).toString
       })
   }
 

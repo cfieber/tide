@@ -25,7 +25,7 @@ import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
 import com.netflix.spinnaker.tide.actor.aws.CloudDriverActor.CloudDriverResponse
 import com.netflix.spinnaker.tide.actor.aws.DependencyCopyActor.DependencyCopyTask
 import com.netflix.spinnaker.tide.actor.aws.ServerGroupCloneActor.ServerGroupDeepCopyTask
-import com.netflix.spinnaker.tide.actor.aws.TaskActor.TaskStatus
+import com.netflix.spinnaker.tide.actor.aws.TaskActor.{ExecuteTask, TaskStatus}
 import com.netflix.spinnaker.tide.actor.aws.TaskDirector._
 import com.netflix.spinnaker.tide.actor.aws._
 import com.wordnik.swagger.annotations.{ApiOperation, Api}
@@ -134,10 +134,10 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
                           @RequestParam(value = "dryRun", defaultValue = "false") dryRun: Boolean,
                           @RequestBody target: VpcDefinition) = {
     val reference = AwsReference(AwsLocation(account, region), AutoScalingGroupIdentity(asgName))
-    val task = ServerGroupDeepCopyTask(reference, target.toVpcLocation, dryRun = dryRun)
-    val future = (taskDirector ? task).mapTo[TaskStatus]
-    val taskStatus = Await.result(future, timeout.duration)
-    taskStatus.taskId
+    val taskDescription = ServerGroupDeepCopyTask(reference, target.toVpcLocation, dryRun = dryRun)
+    val future = (taskDirector ? taskDescription).mapTo[ExecuteTask]
+    val task = Await.result(future, timeout.duration)
+    task.taskId
   }
 
   @ApiOperation(value = "Copies security groups and load balancers to the target.",
@@ -145,9 +145,9 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
   @RequestMapping(value = Array("/deepCopy/"), method = Array(POST))
   def deepCopyServerGroupDependencies(@RequestParam(value = "dryRun", defaultValue = "false") dryRun: Boolean,
                                       @RequestBody options: DependencyCopyDefinition) = {
-    val future = (taskDirector ? options.toDependencyCopyTask.copy(dryRun = dryRun)).mapTo[TaskStatus]
-    val taskStatus = Await.result(future, timeout.duration)
-    taskStatus.taskId
+    val future = (taskDirector ? options.toDependencyCopyTask.copy(dryRun = dryRun)).mapTo[ExecuteTask]
+    val task = Await.result(future, timeout.duration)
+    task.taskId
   }
 }
 
