@@ -57,9 +57,20 @@ object AwsApi {
     def ensureSecurityGroupNameOnIngressRules(securityGroupIdToName: Map[String, SecurityGroupIdentity]): SecurityGroupState = {
       val newIpPermissions = ipPermissions.map { ipPermission =>
         val newUserIdGroupPairs = ipPermission.userIdGroupPairs.map {
-          case pair@UserIdGroupPairs(_, Some(groupName)) => pair
-          case pair@UserIdGroupPairs(Some(groupId), None) =>
+          case pair @ UserIdGroupPairs(_, Some(groupName)) => pair
+          case pair @ UserIdGroupPairs(Some(groupId), None) =>
             UserIdGroupPairs(Option(groupId), securityGroupIdToName.get(groupId).map(_.groupName))
+        }
+        ipPermission.copy(userIdGroupPairs = newUserIdGroupPairs)
+      }
+      copy(ipPermissions = newIpPermissions)
+    }
+
+    def removeLegacySuffixesFromSecurityGroupIngressRules(): SecurityGroupState = {
+      val newIpPermissions = ipPermissions.map { ipPermission =>
+        val newUserIdGroupPairs = ipPermission.userIdGroupPairs.map { userGroupPair =>
+          val newGroupName: Option[String] = userGroupPair.groupName.map(SecurityGroupIdentity(_).dropLegacySuffix.groupName)
+          UserIdGroupPairs(None, newGroupName)
         }
         ipPermission.copy(userIdGroupPairs = newUserIdGroupPairs)
       }
@@ -74,7 +85,6 @@ object AwsApi {
                           userIdGroupPairs: Set[UserIdGroupPairs])
 
   case class UserIdGroupPairs(groupId: Option[String], groupName: Option[String])
-
 
   case class LoadBalancer(@JsonUnwrapped @JsonProperty("identity") identity: LoadBalancerIdentity,
                           @JsonUnwrapped @JsonProperty("state") state: LoadBalancerState)
@@ -144,6 +154,11 @@ object AwsApi {
 
     def convertToSecurityGroupNames(securityGroupIdToName: Map[String, SecurityGroupIdentity]): LoadBalancerState = {
       copy(securityGroups = normalizeSecurityGroupNames(securityGroups, securityGroupIdToName))
+    }
+
+    def removeLegacySuffixesFromSecurityGroups(): LoadBalancerState = {
+      val newGroupNames = securityGroups.map(SecurityGroupIdentity(_).dropLegacySuffix.groupName)
+      copy(securityGroups = newGroupNames)
     }
 
     def populateVpcAttributes(vpcs: List[Vpc], subnetDetails: List[Subnet]): LoadBalancerState = {

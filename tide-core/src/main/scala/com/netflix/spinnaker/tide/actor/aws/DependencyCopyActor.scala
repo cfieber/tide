@@ -150,7 +150,8 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               if (task.dryRun) {
                 self ! Found(targetSecurityGroupIdentity)
               } else {
-                val upsert = UpsertSecurityGroup(latestState.state, overwrite = false)
+                val newSecurityGroupState = latestState.state.removeLegacySuffixesFromSecurityGroupIngressRules()
+                val upsert = UpsertSecurityGroup(newSecurityGroupState, overwrite = false)
                 awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
               }
           }
@@ -180,7 +181,9 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               if (task.dryRun) {
                 self ! Found(targetLoadBalancerIdentity)
               } else {
-                val upsert = UpsertLoadBalancer(latestState.state.forVpc(task.target.vpcName, vpcIds.target), overwrite = false)
+                val newLoadBalancerState = latestState.state.forVpc(task.target.vpcName, vpcIds.target)
+                  .removeLegacySuffixesFromSecurityGroups()
+                val upsert = UpsertLoadBalancer(newLoadBalancerState, overwrite = false)
                 awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
               }
           }

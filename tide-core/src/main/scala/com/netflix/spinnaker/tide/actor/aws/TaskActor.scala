@@ -99,8 +99,8 @@ class TaskActor extends PersistentActor with ActorLogging {
       updateState(event)
   }
 
-  def updateState(event: Any) = {
-    event match {
+  def updateState(msg: Any) = {
+    msg match {
       case event: ExecuteTask =>
         taskId = event.taskId
         parentTaskId = event.parentTaskId
@@ -127,6 +127,7 @@ class TaskActor extends PersistentActor with ActorLogging {
       case event: ChildTaskComplete =>
         childTasksComplete += (event.taskComplete.taskId -> event.taskComplete)
 
+      case event => Nil
     }
   }
 
