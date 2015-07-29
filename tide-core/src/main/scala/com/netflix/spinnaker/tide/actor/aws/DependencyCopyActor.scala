@@ -11,6 +11,7 @@ import com.netflix.spinnaker.tide.actor.aws.TaskActor._
 import com.netflix.spinnaker.tide.actor.aws.TaskDirector._
 import com.netflix.spinnaker.tide.actor.aws.VpcPollingActor.GetVpcs
 import akka.pattern.ask
+import com.netflix.spinnaker.tide.transform.VpcTransformations
 import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 
@@ -150,7 +151,10 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               if (task.dryRun) {
                 self ! Found(targetSecurityGroupIdentity)
               } else {
-                val newSecurityGroupState = latestState.state.removeLegacySuffixesFromSecurityGroupIngressRules()
+                val securityGroupStateWithoutLegacySuffixes = latestState.state.removeLegacySuffixesFromSecurityGroupIngressRules()
+                val vpcTransformation = new VpcTransformations().getVpcTransformation(task.source.vpcName, task.target.vpcName)
+                val translatedIpPermissions = vpcTransformation.translateIpPermissions(securityGroupStateWithoutLegacySuffixes.ipPermissions)
+                val newSecurityGroupState = securityGroupStateWithoutLegacySuffixes.copy(ipPermissions = translatedIpPermissions)
                 val upsert = UpsertSecurityGroup(newSecurityGroupState, overwrite = false)
                 awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
               }
