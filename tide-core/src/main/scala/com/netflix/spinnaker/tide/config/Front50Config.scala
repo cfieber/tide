@@ -25,7 +25,7 @@ class Front50Config {
       setEndpoint(front50Endpoint).
       setClient(retrofitClient).
       setConverter(new JacksonConverter(objectMapper)).
-      setLogLevel(retrofitLogLevel).
+      setLogLevel(RestAdapter.LogLevel.BASIC).
       build.create(classOf[Front50Service])
   }
 
