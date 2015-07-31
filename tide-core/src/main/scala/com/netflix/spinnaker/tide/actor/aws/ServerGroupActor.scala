@@ -21,7 +21,7 @@ import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.PersistentActor
 import com.netflix.spinnaker.tide.actor.aws.AwsApi.{AwsReference, ServerGroupIdentity}
-import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor._
+import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor._
 import scala.concurrent.duration.DurationInt
 
 class ServerGroupActor extends PersistentActor with ActorLogging {
@@ -75,7 +75,7 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
     awsReference = newAwsReference
   }
 
-  private def updateState(event: AwsResourceEvent) = {
+  private def updateState(event: ResourceEvent) = {
     event match {
       case event: ServerGroupLatestState =>
         latestState = Option(event)

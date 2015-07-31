@@ -16,45 +16,18 @@
 
 package com.netflix.spinnaker.tide.config
 
-import javax.annotation.PostConstruct
-
-import akka.actor.ActorRef
-import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.aws.AwsApi.AwsLocation
-import com.netflix.spinnaker.tide.actor.aws.PollingActor.Start
-import com.netflix.spinnaker.tide.actor.aws._
 import com.netflix.spinnaker.tide.api.EddaService
 import org.springframework.beans.factory.annotation.{Value, Autowired}
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.{Bean, Configuration}
-import retrofit.RestAdapter
 import retrofit.client.Client
-
 import scala.beans.BeanProperty
-import scala.collection.JavaConversions._
 
 @Configuration
 class EddaConfig {
 
   @Autowired var retrofitClient: Client = _
-  @Autowired var clusterSharding: ClusterSharding = _
-  @Autowired var cloudDriver: CloudDriverActor.Ref = _
-
-  @PostConstruct
-  def startPollingEdda(): Unit = {
-    val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, SubnetPollingActor,
-      SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
-    val accounts = eddaSettings.getAccountToRegionsMapping.keySet()
-    for (account <- accounts) {
-      val regions: java.util.List[String] = eddaSettings.getAccountToRegionsMapping.get(account)
-      for (region <- regions) {
-        val start = Start(account, region, eddaSettings.urlTemplate, cloudDriver)
-        for (poller <- pollers) {
-          clusterSharding.shardRegion(poller.typeName) ! start
-        }
-      }
-    }
-  }
 
   @Bean
   @ConfigurationProperties("edda")

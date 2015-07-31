@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide.actor.aws
 import akka.actor.{Props, ActorRef}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, LoadBalancerLatestState}
+import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor.{AwsResourceProtocol, LoadBalancerLatestState}
 import com.netflix.spinnaker.tide.actor.aws.SecurityGroupPollingActor.GetSecurityGroupIdToNameMappings
 import com.netflix.spinnaker.tide.actor.aws.SubnetPollingActor.GetSubnets
 import akka.pattern.ask
@@ -28,7 +28,7 @@ import scala.concurrent.duration.DurationInt
 
 import scala.concurrent.Await
 
-class LoadBalancerPollingActor extends PollingActor {
+class LoadBalancerPollingActor extends EddaPollingActor {
   implicit val timeout = Timeout(5 seconds)
 
   var subnets: List[Subnet] = _
@@ -46,7 +46,7 @@ class LoadBalancerPollingActor extends PollingActor {
         populateVpcAttributes(vpcs, subnets)
       val reference = AwsReference(AwsLocation(account, region), loadBalancer.identity)
       val latestState = LoadBalancerLatestState(normalizedState)
-      resourceCluster(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, latestState, Option(cloudDriver))
+      getShardCluster(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, latestState, Option(cloudDriver))
     }
   }
 }

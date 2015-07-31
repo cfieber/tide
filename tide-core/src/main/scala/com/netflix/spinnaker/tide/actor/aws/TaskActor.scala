@@ -10,6 +10,7 @@ import com.netflix.spinnaker.tide.actor.aws.AwsApi.{AwsIdentity, AwsReference}
 import com.netflix.spinnaker.tide.actor.aws.TaskActor._
 import com.netflix.spinnaker.tide.actor.aws.TaskDirector.TaskDescription
 import akka.pattern.ask
+import com.netflix.spinnaker.tide.api.PipelineState
 import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 
@@ -145,9 +146,11 @@ object TaskActor {
   case class Warn(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity], message: String) extends TaskProtocol
 
   sealed trait Mutation extends TaskProtocol
-  case class Create(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity]) extends Mutation {
+  sealed trait Create extends Mutation{
     val operation = "create"
   }
+  case class CreateAwsResource(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity], objectToCreate: Option[Any]= None) extends Create
+  case class CreatePipeline(taskId: String, pipelineToCreate: PipelineState) extends Create
 
   case class GetTask(taskId: String) extends TaskProtocol
   case class TaskStatus(taskId: String, parentTaskId: Option[String], taskDescription: TaskDescription,
@@ -185,7 +188,7 @@ object TaskActor {
   }
 
   case class ChildTaskComplete(parentTaskId: String, taskComplete: TaskComplete) extends ChildTaskProtocol
-  case class ChildTaskGroupComplete(parentTaskId: String, taskComplete: List[TaskComplete]) extends ChildTaskProtocol
+  case class ChildTaskGroupComplete(parentTaskId: String, taskCompletes: List[TaskComplete]) extends ChildTaskProtocol
 
   def startCluster(clusterSharding: ClusterSharding) = {
     clusterSharding.start(

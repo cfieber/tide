@@ -37,14 +37,17 @@ class AkkaClusterConfiguration {
     SecurityGroupActor.startCluster(clusterSharding)
     LoadBalancerActor.startCluster(clusterSharding)
     ServerGroupActor.startCluster(clusterSharding)
+    PipelineActor.startCluster(clusterSharding)
 
     VpcPollingActor.startCluster(clusterSharding)
     SubnetPollingActor.startCluster(clusterSharding)
     SecurityGroupPollingActor.startCluster(clusterSharding)
     LoadBalancerPollingActor.startCluster(clusterSharding)
     ServerGroupPollingActor.startCluster(clusterSharding)
+    PipelinePollingActor.startCluster(clusterSharding)
 
-    ServerGroupCloneActor.startCluster(clusterSharding)
+    ServerGroupDeepCopyActor.startCluster(clusterSharding)
+    PipelineDeepCopyActor.startCluster(clusterSharding)
     DependencyCopyActor.startCluster(clusterSharding)
 
     TaskDirector.startCluster(clusterSharding)

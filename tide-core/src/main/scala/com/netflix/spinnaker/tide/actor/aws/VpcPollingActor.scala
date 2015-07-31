@@ -26,7 +26,7 @@ import com.netflix.spinnaker.tide.actor.aws.VpcPollingActor.GetVpcs
 import com.netflix.spinnaker.tide.api.EddaService
 import scala.concurrent.duration.DurationInt
 
-class VpcPollingActor extends PollingActor {
+class VpcPollingActor extends EddaPollingActor {
 
   var vpcs: List[Vpc] = _
 

@@ -18,14 +18,14 @@ package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{ActorRef, ActorLogging, Actor}
 import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.AwsResourceActor.{AwsResourceProtocol, CloneServerGroup, UpsertLoadBalancer, UpsertSecurityGroup}
+import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor._
 import com.netflix.spinnaker.tide.actor.aws.CloudDriverActor.{GetTaskDetail, CloudDriverResponse}
 import com.netflix.spinnaker.tide.api.CloudDriverService.TaskDetail
 import com.netflix.spinnaker.tide.api._
 
-class CloudDriverActor(private val cloudDriverService: CloudDriverService) extends Actor with ActorLogging {
+class CloudDriverActor(private val cloudDriverService: CloudDriverService)
+  extends Actor with ActorLogging {
   override def receive: Receive = {
-
     case AwsResourceProtocol(awsReference, event: UpsertSecurityGroup, _) if awsReference.identity.isInstanceOf[SecurityGroupIdentity] =>
       val op = UpsertSecurityGroupOperation.from(awsReference.asInstanceOf[AwsReference[SecurityGroupIdentity]], event.state)
       val taskResult = cloudDriverService.submitTask(op.content())
