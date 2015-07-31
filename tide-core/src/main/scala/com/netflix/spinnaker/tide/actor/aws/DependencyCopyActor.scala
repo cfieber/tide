@@ -134,8 +134,13 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
             case None =>
               val sourceSecurityGroupName = securityGroupNameTargetToSource(name)
               sendTaskEvent(CreateAwsResource(taskId, event.awsReference))
-              awsResource ! AwsResourceProtocol(AwsReference(task.source.location,
-                SecurityGroupIdentity(sourceSecurityGroupName, vpcIds.source)), GetSecurityGroup(), None)
+              if (task.dryRun) {
+                persist(TargetSecurityGroup(name, "nonexistant"))(it => updateState(it))
+                self ! Found(event.awsReference.identity)
+              } else {
+                awsResource ! AwsResourceProtocol(AwsReference(task.source.location,
+                  SecurityGroupIdentity(sourceSecurityGroupName, vpcIds.source)), GetSecurityGroup(), None)
+              }
             case Some(latestState) =>
               persist(TargetSecurityGroup(name, latestState.securityGroupId))(it => updateState(it))
               self ! Found(event.awsReference.identity)
@@ -152,9 +157,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               }
               val targetSecurityGroupIdentity = transformToTargetIdentity(event.awsReference.identity)
               val referenceToUpsert = AwsReference(task.target.location, targetSecurityGroupIdentity)
-              if (task.dryRun) {
-                self ! Found(targetSecurityGroupIdentity)
-              } else {
+              if (!task.dryRun) {
                 val securityGroupStateWithoutLegacySuffixes = latestState.state.removeLegacySuffixesFromSecurityGroupIngressRules()
                 val vpcTransformation = new VpcTransformations().getVpcTransformation(task.source.vpcName, task.target.vpcName)
                 val translatedIpPermissions = vpcTransformation.translateIpPermissions(securityGroupStateWithoutLegacySuffixes.ipPermissions)
