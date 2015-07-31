@@ -41,27 +41,27 @@ class ActorSystemConfiguration {
     var config: Config = ConfigFactory.empty()
       .withValue("akka.remote.netty.tcp.port", ConfigValueFactory.fromAnyRef(clusterPort))
 
-    config = sys.env.get("NETFLIX_CLUSTER") match {
-      case Some(currentCluster) =>
-        val currentIp = sys.env("EC2_LOCAL_IPV4")
-        val currentApp = sys.env("NETFLIX_APP")
-        val currentAccount = sys.env("NETFLIX_ENVIRONMENT")
-        val clusterDetail = spinnakerService.getClusterDetail(currentApp, currentAccount, currentCluster)
-        val serverGroups = clusterDetail.serverGroups
-        val seeds: List[String] = if (serverGroups.nonEmpty) {
-          val allInstancesInCluster = serverGroups.flatMap(_.instances)
-          allInstancesInCluster map (instance => s"akka.tcp://$actorSystemName@${instance.privateIpAddress}:$clusterPort")
-        } else {
-          Nil
-        }
-        config
-          .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(currentIp))
-          .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seeds.asJava))
-      case None =>
-        config
-          .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef("127.0.0.1"))
-          .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(List("akka.tcp://default@127.0.0.1:2551")))
-    }
+//    config = sys.env.get("NETFLIX_CLUSTER") match {
+//      case Some(currentCluster) =>
+//        val currentIp = sys.env("EC2_LOCAL_IPV4")
+//        val currentApp = sys.env("NETFLIX_APP")
+//        val currentAccount = sys.env("NETFLIX_ENVIRONMENT")
+//        val clusterDetail = spinnakerService.getClusterDetail(currentApp, currentAccount, currentCluster)
+//        val serverGroups = clusterDetail.serverGroups
+//        val seeds: List[String] = if (serverGroups.nonEmpty) {
+//          val allInstancesInCluster = serverGroups.flatMap(_.instances)
+//          allInstancesInCluster map (instance => s"akka.tcp://$actorSystemName@${instance.privateIpAddress}:$clusterPort")
+//        } else {
+//          Nil
+//        }
+//        config
+//          .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(currentIp))
+//          .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seeds.asJava))
+//      case None =>
+//        config
+//          .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef("127.0.0.1"))
+//          .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(List("akka.tcp://default@127.0.0.1:2551")))
+//    }
 
     config = config withFallback ConfigFactory.load()
     println(s"***** Akka config: $config")
