@@ -60,7 +60,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
 
     case ContinueTask(executeTask) =>
       awsResource = executeTask.cloudResourceRef
-      checkForCreatedResources = scheduler.schedule(0 seconds, 15 seconds, self, CheckCompletion())
+      checkForCreatedResources = scheduler.schedule(0 seconds, 25 seconds, self, AskForResources())
 
     case event @ ExecuteTask(_, _, task: DependencyCopyTask, _) =>
       persist(event) { e =>
@@ -70,7 +70,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         val sourceVpc = vpcs.find(_.name == task.source.vpcName).map(_.vpcId)
         val targetVpc = vpcs.find(_.name == task.target.vpcName).map(_.vpcId)
         self ! VpcIds(sourceVpc, targetVpc)
-        checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckCompletion())
+        checkForCreatedResources = scheduler.schedule(25 seconds, 25 seconds, self, AskForResources())
         task.requiredSecurityGroupNames.foreach(it => self ! Requires(SecurityGroupIdentity(it)))
         task.sourceLoadBalancerNames.foreach(it => self ! Requires(LoadBalancerIdentity(it)))
       }
@@ -95,6 +95,11 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
           }
         }
       }
+
+
+    case event: AskForResources =>
+      askForRelevantResources()
+      self ! CheckCompletion
 
     case event: CheckCompletion =>
       checkCompletion()
@@ -155,15 +160,17 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
                   self ! Requires(SecurityGroupIdentity(userIdGroupPair.groupName.get))
                 }
               }
-              val targetSecurityGroupIdentity = transformToTargetIdentity(event.awsReference.identity)
-              val referenceToUpsert = AwsReference(task.target.location, targetSecurityGroupIdentity)
-              if (!task.dryRun) {
-                val securityGroupStateWithoutLegacySuffixes = latestState.state.removeLegacySuffixesFromSecurityGroupIngressRules()
-                val vpcTransformation = new VpcTransformations().getVpcTransformation(task.source.vpcName, task.target.vpcName)
-                val translatedIpPermissions = vpcTransformation.translateIpPermissions(securityGroupStateWithoutLegacySuffixes.ipPermissions)
-                val newSecurityGroupState = securityGroupStateWithoutLegacySuffixes.copy(ipPermissions = translatedIpPermissions)
-                val upsert = UpsertSecurityGroup(newSecurityGroupState, overwrite = false)
-                awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
+              if (!securityGroupNameToSourceId.contains(name)) {
+                val targetSecurityGroupIdentity = transformToTargetIdentity(event.awsReference.identity)
+                val referenceToUpsert = AwsReference(task.target.location, targetSecurityGroupIdentity)
+                if (!task.dryRun) {
+                  val securityGroupStateWithoutLegacySuffixes = latestState.state.removeLegacySuffixesFromSecurityGroupIngressRules()
+                  val vpcTransformation = new VpcTransformations().getVpcTransformation(task.source.vpcName, task.target.vpcName)
+                  val translatedIpPermissions = vpcTransformation.translateIpPermissions(securityGroupStateWithoutLegacySuffixes.ipPermissions)
+                  val newSecurityGroupState = securityGroupStateWithoutLegacySuffixes.copy(ipPermissions = translatedIpPermissions)
+                  val upsert = UpsertSecurityGroup(newSecurityGroupState, overwrite = false)
+                  awsResource ! AwsResourceProtocol(referenceToUpsert, upsert)
+                }
               }
           }
         case other =>
@@ -267,13 +274,16 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         securityGroupNameToSourceId(sourceName) -> securityGroupNameToTargetId(targetName)
       }.toMap
       self ! TaskSuccess(taskId, task, DependencyCopyTaskResult(securityGroupIdsSourceToTarget))
-    } else {
-      missingDependencies.foreach(checkForCreatedTargetResource)
-      securityGroupNameTargetToSource.foreach {
-        case (targetName, sourceName) =>
-          awsResource ! AwsResourceProtocol(AwsReference(task.source.location, SecurityGroupIdentity(sourceName, vpcIds.source)), GetSecurityGroup(), None)
-          awsResource ! AwsResourceProtocol(AwsReference(task.target.location, SecurityGroupIdentity(targetName, vpcIds.target)), GetSecurityGroup(), None)
-      }
+    }
+  }
+
+  def askForRelevantResources(): Unit = {
+    val missingDependencies = resourcesRequired.diff(resourcesFound)
+    missingDependencies.foreach(checkForCreatedTargetResource)
+    val unseenSourceSecurityGroups: List[String] = securityGroupNameTargetToSource.values.toList.diff(securityGroupNameToSourceId.keys.toList)
+    unseenSourceSecurityGroups.foreach { unseenSourceSecurityGroup =>
+      val ref = AwsReference(task.source.location, SecurityGroupIdentity(unseenSourceSecurityGroup, vpcIds.source))
+      awsResource ! AwsResourceProtocol(ref, GetSecurityGroup(), None)
     }
   }
 
@@ -305,6 +315,7 @@ object DependencyCopyActor {
   }
   case class VpcIds(source: Option[String], target: Option[String]) extends DependencyCopyProtocol
   case class CheckCompletion() extends DependencyCopyProtocol
+  case class AskForResources() extends DependencyCopyProtocol
   case class Requires(awsIdentity: AwsIdentity) extends DependencyCopyProtocol
   case class Found(awsIdentity: AwsIdentity) extends DependencyCopyProtocol
 
