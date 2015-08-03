@@ -30,7 +30,7 @@ trait CloudDriverService {
   def submitTask(@Body cloudDriverOperations: List[Map[String, CloudDriverOperation]]): TaskReference
 
   @Headers(Array("Accept: application/json"))
-  @GET("/applications/{application}/clusters/{account}/{cluster:.+}")
+  @GET("/applications/{application}/clusters/{account}/{cluster}")
   def getClusterDetail(
                         @Path("application") application: String,
                         @Path("account") account: String,
