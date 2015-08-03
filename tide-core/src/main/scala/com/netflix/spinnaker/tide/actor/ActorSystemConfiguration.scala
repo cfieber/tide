@@ -46,7 +46,7 @@ class ActorSystemConfiguration {
         val currentIp = sys.env("EC2_LOCAL_IPV4")
         val currentApp = sys.env("NETFLIX_APP")
         val currentAccount = sys.env("NETFLIX_ENVIRONMENT")
-        val clusterDetail = cloudDriverService.getClusterDetail(currentApp, currentAccount, currentCluster)
+        val clusterDetail = cloudDriverService.getClusterDetail(currentApp, currentAccount, currentCluster).get(0)
         val serverGroups = clusterDetail.serverGroups
         val seeds: List[String] = if (serverGroups.nonEmpty) {
           val allInstancesInCluster = serverGroups.flatMap(_.instances)

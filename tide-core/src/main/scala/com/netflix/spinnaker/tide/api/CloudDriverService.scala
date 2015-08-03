@@ -34,7 +34,7 @@ trait CloudDriverService {
   def getClusterDetail(
                         @Path("application") application: String,
                         @Path("account") account: String,
-                        @Path("cluster") cluster: String): ClusterDetailResponse
+                        @Path("cluster") cluster: String): List[ClusterDetailResponse]
 }
 
 object CloudDriverService {
