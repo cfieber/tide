@@ -16,7 +16,7 @@
 
 package com.netflix.spinnaker.tide.actor
 
-import com.netflix.spinnaker.tide.api.{CloudDriverService, SpinnakerService}
+import com.netflix.spinnaker.tide.api.CloudDriverService
 
 import scala.collection.JavaConversions._
 import com.netflix.akka.spring.AkkaConfiguration
