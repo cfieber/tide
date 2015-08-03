@@ -16,7 +16,7 @@
 
 package com.netflix.spinnaker.tide.actor
 
-import com.netflix.spinnaker.tide.api.SpinnakerService
+import com.netflix.spinnaker.tide.api.{CloudDriverService, SpinnakerService}
 
 import scala.collection.JavaConversions._
 import com.netflix.akka.spring.AkkaConfiguration
@@ -30,7 +30,7 @@ import scala.collection.JavaConverters._
 @Import(Array(classOf[AkkaConfiguration]))
 class ActorSystemConfiguration {
 
-  @Autowired var spinnakerService: SpinnakerService = _
+  @Autowired var cloudDriverService: CloudDriverService = _
 
   @Value("${akka.cluster.port:2551}") var clusterPort: String = _
   @Value("${akka.actor.system.name:default}") var actorSystemName: String = _
@@ -46,7 +46,7 @@ class ActorSystemConfiguration {
         val currentIp = sys.env("EC2_LOCAL_IPV4")
         val currentApp = sys.env("NETFLIX_APP")
         val currentAccount = sys.env("NETFLIX_ENVIRONMENT")
-        val clusterDetail = spinnakerService.getClusterDetail(currentApp, currentAccount, currentCluster)
+        val clusterDetail = cloudDriverService.getClusterDetail(currentApp, currentAccount, currentCluster)
         val serverGroups = clusterDetail.serverGroups
         val seeds: List[String] = if (serverGroups.nonEmpty) {
           val allInstancesInCluster = serverGroups.flatMap(_.instances)
