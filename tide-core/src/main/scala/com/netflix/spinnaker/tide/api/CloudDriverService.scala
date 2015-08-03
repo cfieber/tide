@@ -21,20 +21,28 @@ import retrofit.http._
 
 trait CloudDriverService {
 
-@Headers (Array ("Accept: application/json") )
-@GET ("/task/{taskId}") def getTaskDetail (@Path ("taskId") taskId: String): TaskDetail
+  @Headers(Array("Accept: application/json"))
+  @GET("/task/{taskId}")
+  def getTaskDetail(@Path("taskId") taskId: String): TaskDetail
 
-@Headers (Array ("Accept: application/json") )
-@POST ("/ops") def submitTask (@Body cloudDriverOperations: List[Map[String, CloudDriverOperation]]): TaskReference
+  @Headers(Array("Accept: application/json"))
+  @POST("/ops")
+  def submitTask(@Body cloudDriverOperations: List[Map[String, CloudDriverOperation]]): TaskReference
 
+  @Headers(Array("Accept: application/json"))
+  @GET("/applications/{application}/clusters/{account}/{cluster:.+}")
+  def getClusterDetail(
+                        @Path("application") application: String,
+                        @Path("account") account: String,
+                        @Path("cluster") cluster: String): ClusterDetailResponse
 }
 
 object CloudDriverService {
 
   case class TaskReference(id: String,
-                        error: String,
-                        errors: List[String],
-                        status: String)
+                           error: String,
+                           errors: List[String],
+                           status: String)
 
   case class TaskDetail(id: String,
                         startTimeMs: Long,
@@ -42,7 +50,9 @@ object CloudDriverService {
                         history: List[LogMessage],
                         resultObjects: List[Map[String, Any]]) {
     def getCreatedServerGroups: List[String] = {
-      if (!status.completed) { return Nil }
+      if (!status.completed) {
+        return Nil
+      }
       val resultName = "serverGroupNames"
       var newServerGroupNames: List[String] = Nil
       val resultMapOption: Option[Map[String, Any]] = resultObjects.find(_.contains(resultName))
@@ -66,5 +76,6 @@ object CloudDriverService {
 
   case class LogMessage(status: String,
                         phase: String)
+
 }
 
