@@ -15,7 +15,7 @@ class Front50Config {
   @Autowired var retrofitClient: Client = _
 
   @Bean
-  def front50Endpoint(@Value("${front50Api.baseUrl}") front50ApiUrl: String): Endpoint = {
+  def front50Endpoint(@Value("${front50.baseUrl}") front50ApiUrl: String): Endpoint = {
     newFixedEndpoint(front50ApiUrl)
   }
 

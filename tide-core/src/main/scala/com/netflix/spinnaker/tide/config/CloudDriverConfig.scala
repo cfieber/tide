@@ -31,7 +31,7 @@ class CloudDriverConfig {
   @Autowired var retrofitClient: Client = _
 
   @Bean
-  def cloudDriverEndpoint(@Value("${cloudDriverApi.baseUrl}") cloudDriverApiUrl: String): Endpoint = {
+  def cloudDriverEndpoint(@Value("${cloudDriver.baseUrl}") cloudDriverApiUrl: String): Endpoint = {
     newFixedEndpoint(cloudDriverApiUrl)
   }
 
