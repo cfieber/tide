@@ -16,7 +16,8 @@
 
 package com.netflix.spinnaker.tide.transform
 
-import com.netflix.spinnaker.tide.actor.aws.AwsApi.{UserIdGroupPairs, IpPermission}
+import com.netflix.spinnaker.tide.model.AwsApi
+import AwsApi.{UserIdGroupPairs, IpPermission}
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.prop.TableDrivenPropertyChecks

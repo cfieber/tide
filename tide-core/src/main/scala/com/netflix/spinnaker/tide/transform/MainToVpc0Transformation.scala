@@ -16,7 +16,8 @@
 
 package com.netflix.spinnaker.tide.transform
 
-import com.netflix.spinnaker.tide.actor.aws.AwsApi.{AwsLocation, IpPermission}
+import com.netflix.spinnaker.tide.model.AwsApi
+import AwsApi.{AwsLocation, IpPermission}
 
 import scala.util.matching.Regex
 

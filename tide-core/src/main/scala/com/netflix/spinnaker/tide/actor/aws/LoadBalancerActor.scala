@@ -17,12 +17,12 @@
 package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor._
-import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.{RecoveryCompleted, PersistentActor}
-import com.netflix.spinnaker.tide.actor.aws.AwsApi.{AwsReference, LoadBalancerIdentity}
-import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor._
-import com.netflix.spinnaker.tide.api.UpsertLoadBalancerOperation
+import com.netflix.spinnaker.tide.actor.ClusteredActorObject
+import com.netflix.spinnaker.tide.actor.service.ConstructCloudDriverOperations
+import com.netflix.spinnaker.tide.model._
+import AwsApi.{AwsReference, LoadBalancerIdentity}
 import scala.concurrent.duration.DurationInt
 
 class LoadBalancerActor extends PersistentActor with ActorLogging {
@@ -43,7 +43,7 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
   override def receiveCommand: Receive = {
     case wrapper: AwsResourceProtocol[_] =>
       handleAwsResourceProtocol(wrapper.awsReference.asInstanceOf[AwsReference[LoadBalancerIdentity]],
-        wrapper.event.asInstanceOf[LoadBalancerEvent], wrapper.cloudDriver)
+        wrapper.event.asInstanceOf[LoadBalancerEvent])
 
     case LatestStateTimeout =>
       if (latestState.isDefined) {
@@ -59,21 +59,21 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
       desiredState.foreach(mutate)
   }
 
-  private def handleAwsResourceProtocol(newAwsReference: AwsReference[LoadBalancerIdentity], event: LoadBalancerEvent,
-                                                     newCloudDriverReference: Option[ActorRef]) = event match {
+  private def handleAwsResourceProtocol(newAwsReference: AwsReference[LoadBalancerIdentity],
+                                        event: LoadBalancerEvent) = event match {
     case event: GetLoadBalancer =>
-      updateReferences(newCloudDriverReference, newAwsReference)
+      updateReferences(newAwsReference)
       sender() ! new LoadBalancerDetails(newAwsReference, latestState, desiredState)
 
     case event: UpsertLoadBalancer =>
-      updateReferences(newCloudDriverReference, newAwsReference)
+      updateReferences(newAwsReference)
       if (desiredState != Option(event)) {
         persist(event) { e => updateState(event) }
       }
       self ! MutateState()
 
     case event: LoadBalancerLatestState =>
-      updateReferences(newCloudDriverReference, newAwsReference)
+      updateReferences(newAwsReference)
       latestStateTimeout.cancel()
       latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
       if (latestState != Option(event)) {
@@ -89,7 +89,9 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
           cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
         }
       case Some(latest) =>
-        if (UpsertLoadBalancerOperation.from(awsReference, latest.state) == UpsertLoadBalancerOperation.from(awsReference, upsertLoadBalancer.state)) {
+        val latestOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, latest.state)
+        val upsertOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, upsertLoadBalancer.state)
+        if (latestOp == upsertOp) {
           persist(ClearDesiredState())(it => updateState(it))
         } else {
           if (upsertLoadBalancer.overwrite) {
@@ -101,10 +103,7 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
     }
   }
 
-  private def updateReferences(newCloudDriverReference: Option[ActorRef], newAwsReference: AwsReference[LoadBalancerIdentity]) = {
-    if (newCloudDriverReference.isDefined) {
-      cloudDriver = newCloudDriverReference
-    }
+  private def updateReferences(newAwsReference: AwsReference[LoadBalancerIdentity]) = {
     awsReference = newAwsReference
   }
 
@@ -130,22 +129,7 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
 
 }
 
-object LoadBalancerActor {
-  type Ref = ActorRef
-  val typeName: String = this.getClass.getCanonicalName
-
-  def startCluster(clusterSharding: ClusterSharding) = {
-    clusterSharding.start(
-      typeName = typeName,
-      entryProps = Some(Props[LoadBalancerActor]),
-      idExtractor = {
-        case msg: AwsResourceProtocol[_] =>
-          (msg.akkaIdentifier, msg)
-      },
-      shardResolver = {
-        case msg: AwsResourceProtocol[_] =>
-          (msg.akkaIdentifier.hashCode % 10).toString
-      })
-  }
+object LoadBalancerActor extends ClusteredActorObject {
+  val props = Props[LoadBalancerActor]
 }
 

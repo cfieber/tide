@@ -3,8 +3,9 @@ package com.netflix.spinnaker.tide.controllers
 import akka.actor.ActorRef
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
-import com.netflix.spinnaker.tide.actor.aws.TaskActor.{GetTask, TaskStatus}
-import com.netflix.spinnaker.tide.actor.aws.TaskDirector.GetRunningTasks
+import com.netflix.spinnaker.tide.actor.task.{TaskDirector, TaskActor}
+import TaskActor.{GetTask, TaskStatus}
+import TaskDirector.GetRunningTasks
 import com.netflix.spinnaker.tide.actor.aws._
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RequestMethod._

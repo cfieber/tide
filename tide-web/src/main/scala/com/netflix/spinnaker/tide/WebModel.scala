@@ -17,10 +17,11 @@
 package com.netflix.spinnaker.tide
 
 
-import com.netflix.spinnaker.tide.actor.aws.AwsApi.{VpcLocation, AwsLocation}
-import com.netflix.spinnaker.tide.actor.aws.DependencyCopyActor.DependencyCopyTask
-
-import scala.beans.{BeanInfo, BeanProperty}
+import com.netflix.spinnaker.tide.actor.copy.DependencyCopyActor
+import com.netflix.spinnaker.tide.model.AwsApi
+import AwsApi.{VpcLocation, AwsLocation}
+import DependencyCopyActor.DependencyCopyTask
+import scala.beans.BeanProperty
 
 object WebModel {
 
