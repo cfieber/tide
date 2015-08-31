@@ -20,6 +20,7 @@ import akka.actor.ActorRef
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.WebModel.{PipelineVpcMigrateDefinition, DependencyCopyDefinition, VpcDefinition}
+import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{GetPipeline, PipelineDetails}
 import com.netflix.spinnaker.tide.actor.copy.{ServerGroupDeepCopyActor, PipelineDeepCopyActor}
 import com.netflix.spinnaker.tide.model.AwsApi._
 import com.netflix.spinnaker.tide.model._
@@ -38,7 +39,7 @@ import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 import akka.pattern.ask
 
-//@Api(value = "/resource", description = "Operations on cloud resources")
+@Api(value = "/resource", description = "Operations on cloud resources")
 @RequestMapping(value = Array("/resource"))
 @RestController
 class AwsResourceController @Autowired()(private val clusterSharding: ClusterSharding) {
@@ -137,8 +138,8 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
     cloudDriverResponse.taskDetail
   }
 
-//  @ApiOperation(value = "Copies the pipeline to the target along with dependencies.",
-//    notes = "The pipeline and all of it's dependencies will be copied if they do not exist (security groups, load balancers used in deploy stages). Returns the task id.")
+  @ApiOperation(value = "Copies the pipeline to the target along with dependencies.",
+    notes = "The pipeline and all of it's dependencies will be copied if they do not exist (security groups, load balancers used in deploy stages). Returns the task id.")
   @RequestMapping(value = Array("/pipeline/{id}/deepCopy"), method = Array(POST))
   def deepCopyPipeline(@PathVariable("id") id: String,
                           @RequestParam(value = "dryRun", defaultValue = "false") dryRun: Boolean,
@@ -150,8 +151,8 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
     task.taskId
   }
 
-//  @ApiOperation(value = "Copies the server group to the target along with dependencies.",
-//    notes = "The server group and all of it's dependencies will be copied if they do not exist (security groups, load balancers, scaling policies). Returns the task id.")
+  @ApiOperation(value = "Copies the server group to the target along with dependencies.",
+    notes = "The server group and all of it's dependencies will be copied if they do not exist (security groups, load balancers, scaling policies). Returns the task id.")
   @RequestMapping(value = Array("/serverGroup/{account}/{region}/{asgName}/deepCopy"), method = Array(POST))
   def deepCopyServerGroup(@PathVariable("account") account: String,
                           @PathVariable("region") region: String,
@@ -165,8 +166,8 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
     task.taskId
   }
 
-//  @ApiOperation(value = "Copies security groups and load balancers to the target.",
-//    notes = "Specified security groups and load balancers as well as their dependencies will be copied if they do not exist. Returns the task id.")
+  @ApiOperation(value = "Copies security groups and load balancers to the target.",
+    notes = "Specified security groups and load balancers as well as their dependencies will be copied if they do not exist. Returns the task id.")
   @RequestMapping(value = Array("/deepCopy/"), method = Array(POST))
   def deepCopyServerGroupDependencies(@RequestParam(value = "dryRun", defaultValue = "false") dryRun: Boolean,
                                       @RequestBody options: DependencyCopyDefinition) = {

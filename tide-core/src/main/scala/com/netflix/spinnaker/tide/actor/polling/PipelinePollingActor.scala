@@ -19,10 +19,10 @@ package com.netflix.spinnaker.tide.actor.polling
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor
+import com.netflix.spinnaker.tide.actor.aws.PipelineActor.PipelineDetails
 import com.netflix.spinnaker.tide.actor.polling.PollingActor.Poll
 import com.netflix.spinnaker.tide.actor.service.Front50ContractActorImpl
 import com.netflix.spinnaker.tide.actor.service.Front50Actor.GetPipelines
-import com.netflix.spinnaker.tide.model.PipelineDetails
 
 class PipelinePollingActor() extends PollingActor {
 
@@ -49,7 +49,7 @@ class PipelinePollingActor() extends PollingActor {
 }
 
 object PipelinePollingActor extends PollingActorObject {
-  val props = Props[SecurityGroupPollingActor]
+  val props = Props[PipelinePollingActor]
 
   case class PipelinePoll() extends Poll {
     val pollingIdentifier = "singleton"

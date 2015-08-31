@@ -18,6 +18,7 @@ package com.netflix.spinnaker.tide.actor.service
 
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
+import com.netflix.spinnaker.config.OkHttpClientConfiguration
 import com.netflix.spinnaker.tide.actor.{SingletonActorObject, ClusteredActorObject, ContractActorImpl}
 import com.netflix.spinnaker.tide.actor.service.Front50Actor.{FoundPipelines, GetPipelines, AddPipelines}
 import com.netflix.spinnaker.tide.model.Front50Service
@@ -39,7 +40,8 @@ sealed trait Front50Protocol extends Serializable
 object Front50Actor extends SingletonActorObject {
   val props = Props[Front50Actor]
 
-  case class Front50Init(url: String) extends Front50Protocol with RetrofitServiceInit[Front50Service] {
+  case class Front50Init(url: String) extends Front50Protocol
+    with RetrofitServiceInit[Front50Service] {
     override val serviceType: Class[Front50Service] = classOf[Front50Service]
   }
 

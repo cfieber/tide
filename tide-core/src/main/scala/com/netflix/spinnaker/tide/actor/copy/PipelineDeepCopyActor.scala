@@ -18,14 +18,15 @@ package com.netflix.spinnaker.tide.actor.copy
 
 import akka.actor.{ActorLogging, ActorRef, Props}
 import akka.contrib.pattern.ClusterSharding
-import akka.pattern.ask
 import akka.persistence.{PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
+import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{PipelineDetails, GetPipeline}
+import com.netflix.spinnaker.tide.actor.service.Front50Actor.AddPipelines
 import com.netflix.spinnaker.tide.actor.{ClusteredActorObject, TaskActorObject}
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor
 import com.netflix.spinnaker.tide.actor.copy.DependencyCopyActor.{DependencyCopyTaskResult, DependencyCopyTask}
 import com.netflix.spinnaker.tide.actor.copy.PipelineDeepCopyActor.{CreatePipeline, StartPipelineCloning, PipelineDeepCopyTaskResult, PipelineDeepCopyTask}
-import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor
+import com.netflix.spinnaker.tide.actor.polling.{SecurityGroupPollingContract, SecurityGroupPollingContractActor, SecurityGroupPollingActor}
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.GetSecurityGroupIdToNameMappings
 import com.netflix.spinnaker.tide.actor.service.Front50Actor
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
@@ -34,13 +35,13 @@ import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector, TaskProto
 import com.netflix.spinnaker.tide.model.Front50Service.{PipelineState, ClusterVisitor, Cluster}
 import com.netflix.spinnaker.tide.model._
 import AwsApi._
-
-import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
 
 class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
 
   val clusterSharding = ClusterSharding.get(context.system)
+
+  val securityGroupPolling: SecurityGroupPollingContract = new SecurityGroupPollingContractActor(clusterSharding)
 
   override def persistenceId: String = self.path.name
 
@@ -149,17 +150,14 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
       sendTaskEvent(CreatePipeline(taskId, newPipeline))
       if (!task.dryRun) {
         sendTaskEvent(Log(taskId, s"Cloning pipeline '${pipelineState.name}'"))
-        clusterSharding.shardRegion(Front50Actor.typeName) ! InsertPipeline(newPipeline)
+        clusterSharding.shardRegion(Front50Actor.typeName) ! AddPipelines(List(newPipeline))
       }
       self ! TaskSuccess(taskId, task, PipelineDeepCopyTaskResult("")) // TODO: get new pipeline ID
 
   }
 
   def getSecurityGroupInToNameMapping(account: String, region: String): Map[String, SecurityGroupIdentity] = {
-    val future = getShardCluster(SecurityGroupPollingActor.typeName) ? GetSecurityGroupIdToNameMappings(AwsLocation(account, region))
-    val securityGroupsFuture = future.mapTo[Map[String, SecurityGroupIdentity]]
-    val securityGroupIdToName: Map[String, SecurityGroupIdentity] = Await.result(securityGroupsFuture, timeout.duration)
-    securityGroupIdToName
+    securityGroupPolling.ask(GetSecurityGroupIdToNameMappings(AwsLocation(account, region))).map
   }
 
   def updateState(event: Any) = {

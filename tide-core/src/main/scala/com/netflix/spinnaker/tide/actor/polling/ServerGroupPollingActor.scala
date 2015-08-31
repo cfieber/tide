@@ -30,7 +30,7 @@ import AwsApi._
 class ServerGroupPollingActor() extends EddaPollingActor {
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
-  override def pollScheduler = new PollSchedulerActorImpl(context, VpcPollingActor)
+  override def pollScheduler = new PollSchedulerActorImpl(context, ServerGroupPollingActor)
 
   val vpcPolling: VpcPollingContract = new VpcPollingContractActor(clusterSharding)
   val subnetPolling: SubnetPollingContract = new SubnetPollingContractActor(clusterSharding)

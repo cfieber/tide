@@ -16,13 +16,14 @@
 
 package com.netflix.spinnaker.tide.actor.service
 
-import akka.actor.{ActorLogging, Actor}
+import akka.actor.ActorLogging
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.fasterxml.jackson.databind.DeserializationFeature._
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.SerializationFeature._
 import com.fasterxml.jackson.datatype.jsr310.JSR310Module
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import com.netflix.spinnaker.tide.config.OkHttpClientConfigurationHolder
 import retrofit.Endpoints._
 import retrofit.RestAdapter.{Builder, LogLevel}
 import retrofit.client.OkClient
@@ -42,9 +43,12 @@ trait RetrofitServiceActor[T] extends PersistentActor with ActorLogging {
 
   override def receiveCommand: Receive = {
     case msg: RetrofitServiceInit[T] =>
-      updateState(msg)
-      service = init.get.constructService
-      context become operational
+      persist(msg) { it =>
+        updateState(it)
+        val okClient = new OkClient(OkHttpClientConfigurationHolder.okHttpClientConfiguration.create())
+        service = init.get.constructService(okClient)
+        context become operational
+      }
     case _ => Nil
   }
 
@@ -52,7 +56,8 @@ trait RetrofitServiceActor[T] extends PersistentActor with ActorLogging {
     case RecoveryCompleted =>
       init match {
         case Some(config) =>
-          service = config.constructService
+          val okClient = new OkClient(OkHttpClientConfigurationHolder.okHttpClientConfiguration.create())
+          service = config.constructService(okClient)
           context become operational
         case None => Nil
       }
@@ -60,7 +65,7 @@ trait RetrofitServiceActor[T] extends PersistentActor with ActorLogging {
       updateState(msg)
   }
 
-  private def updateState(event: Any) = {
+  def updateState(event: Any) = {
     event match {
       case msg: RetrofitServiceInit[T] => init = Some(msg)
       case _ => Nil
@@ -73,10 +78,10 @@ trait RetrofitServiceActor[T] extends PersistentActor with ActorLogging {
 
 trait RetrofitServiceInit[T] {
   val url: String
-  val logLevel: LogLevel = LogLevel.BASIC
+  def logLevel: LogLevel = LogLevel.BASIC
   val serviceType: Class[T]
 
-  def constructService: T = {
+  def constructService(okClient: OkClient): T = {
     val objectMapper: ObjectMapper = new ObjectMapper()
     objectMapper.registerModule(DefaultScalaModule)
       .registerModule(new JSR310Module)
@@ -87,7 +92,7 @@ trait RetrofitServiceInit[T] {
     val endpoint = newFixedEndpoint(url)
     new Builder().
       setEndpoint(endpoint).
-      setClient(new OkClient).
+      setClient(okClient).
       setConverter(new JacksonConverter(objectMapper)).
       setLogLevel(logLevel).
       build.create(serviceType)

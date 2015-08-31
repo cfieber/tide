@@ -34,7 +34,6 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
   var latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
 
   var awsReference: AwsReference[ServerGroupIdentity] = _
-  var cloudDriver: Option[ActorRef] = None
   var latestState: Option[ServerGroupLatestState] = None
 
   override def postStop(): Unit = latestStateTimeout.cancel()

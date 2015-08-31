@@ -22,7 +22,7 @@ import com.netflix.spinnaker.tide.model.Front50Service.PipelineState
 
 case class AwsResourceProtocol[T <: AwsIdentity](awsReference: AwsReference[T], event: ResourceEvent)
   extends AkkaClustered with ResourceEvent {
-  @JsonIgnore val akkaIdentifier = s"${awsReference.akkaIdentifier}"
+  @JsonIgnore def akkaIdentifier = s"${awsReference.akkaIdentifier}"
 }
 
 sealed trait ResourceEvent extends Serializable
@@ -58,7 +58,3 @@ case class ServerGroupLatestState(autoScalingGroup: AutoScalingGroupState,
 case class ServerGroupDetails(awsReference: AwsReference[ServerGroupIdentity],
                               latestState: Option[ServerGroupLatestState]) extends ServerGroupEvent
 
-sealed trait PipelineEvent extends ResourceEvent
-case class GetPipeline(id: String) extends PipelineEvent
-case class PipelineDetails(id: String, state: Option[PipelineState]) extends PipelineEvent
-case class InsertPipeline(state: PipelineState) extends PipelineEvent

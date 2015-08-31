@@ -12,11 +12,11 @@ trait ClusteredActorObject {
 
   def idExtractor: IdExtractor = {
     case msg: AkkaClustered =>
-      (msg.akkaIdentifier, msg)
+      (s"$typeName.${msg.akkaIdentifier}", msg)
   }
   def shardResolver: ShardResolver = {
     case msg: AkkaClustered =>
-      (msg.akkaIdentifier.hashCode % 10).toString
+      (s"$typeName.${msg.akkaIdentifier}".hashCode % 10).toString
   }
 
   def startCluster(clusterSharding: ClusterSharding) = {
@@ -29,12 +29,12 @@ trait ClusteredActorObject {
   }
 }
 
-trait SingletonActorObject extends ClusteredActorObject{
+trait SingletonActorObject extends ClusteredActorObject {
   override def idExtractor = {
-    case msg => ("singleton", msg)
+    case msg => (s"$typeName.singleton", msg)
   }
   override def shardResolver = {
-    case msg => "singleton"
+    case msg => s"$typeName.singleton"
   }
 }
 

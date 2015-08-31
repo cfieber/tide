@@ -20,6 +20,7 @@ import javax.annotation.PostConstruct
 
 import akka.actor.ActorSystem
 import akka.contrib.pattern.ClusterSharding
+import com.netflix.spinnaker.config.OkHttpClientConfiguration
 import com.netflix.spinnaker.tide.actor.aws._
 import com.netflix.spinnaker.tide.actor.copy.{ServerGroupDeepCopyActor, PipelineDeepCopyActor, DependencyCopyActor}
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPoll
@@ -31,7 +32,7 @@ import com.netflix.spinnaker.tide.actor.service.Front50Actor.Front50Init
 import com.netflix.spinnaker.tide.actor.service.{Front50Actor, EddaActor, CloudDriverActor}
 import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector}
 import com.netflix.spinnaker.tide.actor.ClusterTestActor
-import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
+import com.netflix.spinnaker.tide.model.AwsApi._
 import org.springframework.beans.factory.annotation.{Value, Autowired}
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.{Bean, Configuration}
@@ -43,11 +44,14 @@ class AkkaClusterConfiguration {
 
   @Autowired var system: ActorSystem = _
 
+  @Autowired var okHttpClientConfiguration: OkHttpClientConfiguration = _
+
   @Value("${cloudDriver.baseUrl}") var cloudDriverApiUrl: String = _
   @Value("${front50.baseUrl}") var front50ApiUrl: String = _
 
   @PostConstruct
   def initialize() = {
+    OkHttpClientConfigurationHolder.okHttpClientConfiguration = okHttpClientConfiguration
     startClusters()
     initActors()
   }
@@ -88,12 +92,17 @@ class AkkaClusterConfiguration {
 
     val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, SubnetPollingActor,
       SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
+    val resourceTypes: List[Class[_]] =List(classOf[Vpc], classOf[Subnet], classOf[SecurityGroup],
+      classOf[LoadBalancer], classOf[AutoScalingGroup], classOf[LaunchConfiguration])
     val accounts = eddaSettings.getAccountToRegionsMapping.keySet()
     for (account <- accounts) {
       val regions: java.util.List[String] = eddaSettings.getAccountToRegionsMapping.get(account)
       for (region <- regions) {
         val location = AwsLocation(account, region)
-        clusterSharding.shardRegion(EddaActor.typeName) ! EddaInit(location, eddaSettings.getUrlTemplate)
+        for (resourceType <- resourceTypes) {
+          clusterSharding.shardRegion(EddaActor.typeName) ! EddaInit(location, eddaSettings.getUrlTemplate,
+            resourceType)
+        }
         for (poller <- pollers) {
           clusterSharding.shardRegion(poller.typeName) ! EddaPoll(location)
         }
@@ -118,4 +127,8 @@ class AkkaClusterConfiguration {
 class EddaSettings {
   @BeanProperty var urlTemplate: String = _
   @BeanProperty var accountToRegionsMapping: java.util.HashMap[String, java.util.List[String]] = _
+}
+
+object OkHttpClientConfigurationHolder {
+  var okHttpClientConfiguration: OkHttpClientConfiguration = _
 }

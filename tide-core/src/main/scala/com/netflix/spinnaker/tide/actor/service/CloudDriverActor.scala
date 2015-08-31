@@ -18,12 +18,14 @@ package com.netflix.spinnaker.tide.actor.service
 
 import akka.actor.Props
 import com.netflix.frigga.Names
-import com.netflix.spinnaker.tide.actor.SingletonActorObject
+import com.netflix.spinnaker.config.OkHttpClientConfiguration
+import com.netflix.spinnaker.tide.actor.{ClusteredActorObject, SingletonActorObject}
 import com.netflix.spinnaker.tide.model.AwsApi._
 import com.netflix.spinnaker.tide.model._
 import CloudDriverActor.{CloudDriverResponse, GetTaskDetail}
 import com.netflix.spinnaker.tide.model.CloudDriverService._
 import com.netflix.spinnaker.tide.model.CloudDriverService.Listener
+import retrofit.RestAdapter.LogLevel
 
 class CloudDriverActor extends RetrofitServiceActor[CloudDriverService] {
 
@@ -56,7 +58,9 @@ sealed trait CloudDriverProtocol extends Serializable
 object CloudDriverActor extends SingletonActorObject {
   val props = Props[CloudDriverActor]
 
-  case class CloudDriverInit(url: String) extends CloudDriverProtocol with RetrofitServiceInit[CloudDriverService] {
+  case class CloudDriverInit(url: String)
+    extends CloudDriverProtocol with RetrofitServiceInit[CloudDriverService] {
+    override def logLevel = LogLevel.FULL
     override val serviceType: Class[CloudDriverService] = classOf[CloudDriverService]
   }
 

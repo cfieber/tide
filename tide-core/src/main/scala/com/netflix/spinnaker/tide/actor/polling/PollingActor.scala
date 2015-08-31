@@ -41,11 +41,11 @@ object PollingActor {
 trait PollingActorObject extends ClusteredActorObject {
   override def idExtractor = {
     case msg: PollingProtocol =>
-      (msg.pollingIdentifier, msg)
+      (s"$typeName.${msg.pollingIdentifier}", msg)
   }
   override def shardResolver = {
     case msg: PollingProtocol =>
-      (msg.pollingIdentifier.hashCode % 10).toString
+      (s"$typeName.${msg.pollingIdentifier}".hashCode % 10).toString
   }
 }
 

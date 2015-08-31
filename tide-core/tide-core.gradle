@@ -9,6 +9,7 @@ dependencies {
   compile spinnaker.dependency("springContext")
   compile spinnaker.dependency("jacksonJsr310")
   compile 'org.springframework.boot:spring-boot:1.2.1.RELEASE'
+  compile spinnaker.dependency("korkWeb")
 
   testCompile "com.miguno.akka:akka-mock-scheduler_2.11:0.3.0"
   testCompile spinnaker.dependency("retrofitMock")

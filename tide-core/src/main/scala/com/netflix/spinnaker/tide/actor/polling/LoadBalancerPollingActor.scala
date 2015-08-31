@@ -29,7 +29,7 @@ import com.netflix.spinnaker.tide.actor.aws._
 class LoadBalancerPollingActor() extends EddaPollingActor {
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
-  override def pollScheduler = new PollSchedulerActorImpl(context, VpcPollingActor)
+  override def pollScheduler = new PollSchedulerActorImpl(context, LoadBalancerPollingActor)
 
   val vpcPolling: VpcPollingContract = new VpcPollingContractActor(clusterSharding)
   val subnetPolling: SubnetPollingContract = new SubnetPollingContractActor(clusterSharding)

@@ -17,10 +17,11 @@
 package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor._
+import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
-import com.netflix.spinnaker.tide.actor.service.ConstructCloudDriverOperations
+import com.netflix.spinnaker.tide.actor.service.{CloudDriverActor, ConstructCloudDriverOperations}
 import com.netflix.spinnaker.tide.model._
 import AwsApi._
 import scala.concurrent.duration.DurationInt
@@ -33,8 +34,9 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
   private implicit val dispatcher = context.dispatcher
   var latestStateTimeout = scheduler.scheduleOnce(20 seconds, self, LatestStateTimeout)
 
+  val clusterSharding = ClusterSharding.get(context.system)
+
   var awsReference: AwsReference[SecurityGroupIdentity] = _
-  var cloudDriver: Option[ActorRef] = None
   var desiredState: Option[UpsertSecurityGroup] = None
   var latestState: Option[SecurityGroupLatestState] = None
 
@@ -84,14 +86,13 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
   }
 
   private def mutate(upsertSecurityGroup: UpsertSecurityGroup) = {
+    val cloudDriverActor = clusterSharding.shardRegion(CloudDriverActor.typeName)
     latestState match {
       case None =>
-        cloudDriver.foreach { cloudDriverActor =>
-          val stateWithoutIngress = upsertSecurityGroup.state.copy(ipPermissions = Set())
-          val eventWithoutIngress = upsertSecurityGroup.copy(state = stateWithoutIngress)
-          cloudDriverActor ! AwsResourceProtocol(awsReference, eventWithoutIngress)
-          cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
-        }
+        val stateWithoutIngress = upsertSecurityGroup.state.copy(ipPermissions = Set())
+        val eventWithoutIngress = upsertSecurityGroup.copy(state = stateWithoutIngress)
+        cloudDriverActor ! AwsResourceProtocol(awsReference, eventWithoutIngress)
+        cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
       case Some(latest) =>
         val latestOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, latest.state)
         val upsertOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, upsertSecurityGroup.state)
@@ -99,7 +100,7 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
           persist(ClearDesiredState())(it => updateState(it))
         } else {
           if (upsertSecurityGroup.overwrite || latest.state.ipPermissions.isEmpty) {
-            cloudDriver.foreach(_ ! AwsResourceProtocol(awsReference, upsertSecurityGroup))
+            cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
           } else {
             persist(ClearDesiredState())(it => updateState(it))
           }

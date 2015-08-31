@@ -50,13 +50,16 @@ class TaskDirector extends PersistentActor with ActorLogging {
 
     case taskDescription: TaskDescription =>
       val executeTask = ExecuteTask(nextTaskId.toString, taskDescription)
+      nextTaskId = nextTaskId + 1
       self ! executeTask
       sender() ! executeTask
 
     case executeTask: ExecuteTask =>
-      updateState(executeTask)
-      getShardCluster(executeTask.description.executionActorTypeName) ! executeTask
-      getShardCluster(TaskActor.typeName) ! executeTask
+      persist(executeTask) { it =>
+        updateState(executeTask)
+        getShardCluster(executeTask.description.executionActorTypeName) ! executeTask
+        getShardCluster(TaskActor.typeName) ! executeTask
+      }
 
     case childTasks: ChildTaskDescriptions =>
       val taskCluster = getShardCluster(TaskActor.typeName)
@@ -82,6 +85,9 @@ class TaskDirector extends PersistentActor with ActorLogging {
         case (id, executeTask) =>
           getShardCluster(executeTask.description.executionActorTypeName) ! ContinueTask(executeTask)
       }
+    case event: ExecuteTask =>
+      updateState(event)
+      nextTaskId = event.taskId.toInt + 1
     case event =>
       updateState(event)
   }
@@ -90,7 +96,6 @@ class TaskDirector extends PersistentActor with ActorLogging {
     event match {
       case event: ExecuteTask =>
         currentExecutionsByTaskId += (event.taskId -> event)
-        nextTaskId = event.taskId.toInt + 1
       case event: TaskComplete =>
         currentExecutionsByTaskId -= event.taskId
     }

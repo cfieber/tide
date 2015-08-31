@@ -17,10 +17,11 @@
 package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor._
+import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
-import com.netflix.spinnaker.tide.actor.service.ConstructCloudDriverOperations
+import com.netflix.spinnaker.tide.actor.service.{CloudDriverActor, ConstructCloudDriverOperations}
 import com.netflix.spinnaker.tide.model._
 import AwsApi.{AwsReference, LoadBalancerIdentity}
 import scala.concurrent.duration.DurationInt
@@ -33,8 +34,9 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
   private implicit val dispatcher = context.dispatcher
   var latestStateTimeout = scheduler.scheduleOnce(20 seconds, self, LatestStateTimeout)
 
+  val clusterSharding = ClusterSharding.get(context.system)
+
   var awsReference: AwsReference[LoadBalancerIdentity] = _
-  var cloudDriver: Option[ActorRef] = None
   var desiredState: Option[UpsertLoadBalancer] = None
   var latestState: Option[LoadBalancerLatestState] = None
 
@@ -83,11 +85,10 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
   }
 
   private def mutate(upsertLoadBalancer: UpsertLoadBalancer) = {
+    val cloudDriverActor = clusterSharding.shardRegion(CloudDriverActor.typeName)
     latestState match {
       case None =>
-        cloudDriver.foreach { cloudDriverActor =>
-          cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
-        }
+        cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
       case Some(latest) =>
         val latestOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, latest.state)
         val upsertOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, upsertLoadBalancer.state)
@@ -95,7 +96,7 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
           persist(ClearDesiredState())(it => updateState(it))
         } else {
           if (upsertLoadBalancer.overwrite) {
-            cloudDriver.foreach(_ ! AwsResourceProtocol(awsReference, upsertLoadBalancer))
+            cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
           } else {
             persist(ClearDesiredState())(it => updateState(it))
           }

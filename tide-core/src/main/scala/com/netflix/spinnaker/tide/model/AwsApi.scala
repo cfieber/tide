@@ -20,6 +20,8 @@ import com.fasterxml.jackson.annotation.{JsonProperty, JsonIgnore, JsonUnwrapped
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
 
+sealed trait AwsProtocol extends Serializable
+
 object AwsApi {
 
   def constructTargetSubnetType(sourceSubnetType: Option[String], targetVpcName: Option[String]): Option[String] = {
@@ -58,7 +60,7 @@ object AwsApi {
   }
 
   case class AwsLocation(account: String, region: String) extends AkkaClustered {
-    @JsonIgnore override val akkaIdentifier = s"$account.$region"
+    @JsonIgnore override def akkaIdentifier = s"$account.$region"
   }
 
   case class VpcLocation(@JsonUnwrapped location: AwsLocation, vpcName: Option[String])
@@ -66,26 +68,26 @@ object AwsApi {
   trait AwsIdentity extends AkkaClustered
 
   case class AwsReference[T <: AwsIdentity](location: AwsLocation, identity: T) extends AkkaClustered {
-    @JsonIgnore override val akkaIdentifier = s"${location.akkaIdentifier}.${identity.akkaIdentifier}"
+    @JsonIgnore override def akkaIdentifier = s"${location.akkaIdentifier}.${identity.akkaIdentifier}"
   }
 
   case class SecurityGroup(groupId: String,
                            @JsonUnwrapped @JsonProperty("name") identity: SecurityGroupIdentity,
-                           @JsonUnwrapped @JsonProperty("state") state: SecurityGroupState)
+                           @JsonUnwrapped @JsonProperty("state") state: SecurityGroupState) extends AwsProtocol
 
   case class LoadBalancer(@JsonUnwrapped @JsonProperty("identity") identity: LoadBalancerIdentity,
-                          @JsonUnwrapped @JsonProperty("state") state: LoadBalancerState)
+                          @JsonUnwrapped @JsonProperty("state") state: LoadBalancerState) extends AwsProtocol
 
   case class LaunchConfiguration(@JsonUnwrapped @JsonProperty("identity") identity: LaunchConfigurationIdentity,
-                                 @JsonUnwrapped @JsonProperty("state") state: LaunchConfigurationState)
+                                 @JsonUnwrapped @JsonProperty("state") state: LaunchConfigurationState) extends AwsProtocol
 
   case class AutoScalingGroup(@JsonUnwrapped @JsonProperty("identity") identity: AutoScalingGroupIdentity,
-                              @JsonUnwrapped @JsonProperty("state") state: AutoScalingGroupState)
+                              @JsonUnwrapped @JsonProperty("state") state: AutoScalingGroupState) extends AwsProtocol
 
   case class Tag(key: String, value: String)
 
   case class SecurityGroupIdentity(groupName: String, vpcId: Option[String] = None) extends AwsIdentity {
-    @JsonIgnore val akkaIdentifier: String = s"SecurityGroup.$groupName.${vpcId.getOrElse("")}"
+    @JsonIgnore def akkaIdentifier: String = s"SecurityGroup.$groupName.${vpcId.getOrElse("")}"
     def dropLegacySuffix: SecurityGroupIdentity = {
       val newGroupName = groupName match {
         case s if s.endsWith("-vpc") => s"${s.dropRight("-vpc".length)}"
@@ -95,7 +97,7 @@ object AwsApi {
     }
   }
 
-  case class SecurityGroupState(description: String, ipPermissions: Set[IpPermission]) {
+  case class SecurityGroupState(description: String, ipPermissions: Set[IpPermission])  extends AwsProtocol {
     def ensureSecurityGroupNameOnIngressRules(securityGroupIdToName: Map[String, SecurityGroupIdentity]): SecurityGroupState = {
       val newIpPermissions = ipPermissions.map { ipPermission =>
         val newUserIdGroupPairs = ipPermission.userIdGroupPairs.map {
@@ -129,7 +131,7 @@ object AwsApi {
   case class UserIdGroupPairs(groupId: Option[String], groupName: Option[String])
 
   case class LoadBalancerIdentity(loadBalancerName: String) extends AwsIdentity {
-    @JsonIgnore val akkaIdentifier: String = s"LoadBalancer.$loadBalancerName"
+    @JsonIgnore def akkaIdentifier: String = s"LoadBalancer.$loadBalancerName"
 
     @JsonIgnore def forVpc(vpcNameOption: Option[String]): LoadBalancerIdentity = {
       vpcNameOption match {
@@ -162,7 +164,7 @@ object AwsApi {
                                healthCheck: HealthCheck, listenerDescriptions: Set[ListenerDescription],
                                scheme: String, securityGroups: Set[String],
                                sourceSecurityGroup: ElbSourceSecurityGroup, subnets: Set[String],
-                               subnetType: Option[String]) {
+                               subnetType: Option[String])  extends AwsProtocol {
 
     def forVpc(vpcName: Option[String], vpcId: Option[String]): LoadBalancerState = {
       this.copy(vpcId = vpcId, subnetType = constructTargetSubnetType(subnetType, vpcName))
@@ -201,7 +203,7 @@ object AwsApi {
   case class ElbSourceSecurityGroup(groupName: String, ownerAlias: String)
 
   case class LaunchConfigurationIdentity(launchConfigurationName: String) extends AwsIdentity {
-    @JsonIgnore val akkaIdentifier: String = s"LaunchConfiguration.$launchConfigurationName"
+    @JsonIgnore def akkaIdentifier: String = s"LaunchConfiguration.$launchConfigurationName"
   }
 
   case class LaunchConfigurationState(createdTime: Long,
@@ -209,7 +211,7 @@ object AwsApi {
                                       ebsOptimized: Boolean, iamInstanceProfile: String, imageId: String,
                                       instanceMonitoring: InstanceMonitoring, instanceType: String, kernelId: String,
                                       keyName: String, ramdiskId: String,
-                                      securityGroups: Set[String], spotPrice: Option[String]) {
+                                      securityGroups: Set[String], spotPrice: Option[String]) extends AwsProtocol {
     def convertToSecurityGroupNames(securityGroupIdToName: Map[String, SecurityGroupIdentity]): LaunchConfigurationState = {
       copy(securityGroups = normalizeSecurityGroupNames(securityGroups, securityGroupIdToName))
     }
@@ -223,7 +225,7 @@ object AwsApi {
   case class InstanceMonitoring(enabled: Boolean)
 
   case class AutoScalingGroupIdentity(autoScalingGroupName: String) extends AwsIdentity {
-    @JsonIgnore val akkaIdentifier: String = s"AutoScalingGroup.$autoScalingGroupName"
+    @JsonIgnore def akkaIdentifier: String = s"AutoScalingGroup.$autoScalingGroupName"
     def nextGroup: AutoScalingGroupIdentity = {
       AutoScalingGroupIdentity(AutoScalingGroupNameBuilder.buildNextGroupName(autoScalingGroupName))
     }
@@ -239,7 +241,7 @@ object AwsApi {
                                    healthCheckType: String, loadBalancerNames: Set[String],
                                    maxSize: Int, minSize: Int, suspendedProcesses: Set[SuspendedProcess],
                                    terminationPolicies: Set[String],
-                                   subnetType: Option[String], vpcName: Option[String]) {
+                                   subnetType: Option[String], vpcName: Option[String]) extends AwsProtocol {
     def forVpc(vpcName: Option[String]): AutoScalingGroupState = {
       val newLoadBalancerNames = loadBalancerNames.map(LoadBalancerIdentity(_).forVpc(vpcName).loadBalancerName)
       this.copy(loadBalancerNames = newLoadBalancerNames, vpcName = vpcName,
@@ -272,7 +274,7 @@ object AwsApi {
 
   case class Subnet(subnetId: String, vpcId: String,
                     availabilityZone: String, availableIpAddressCount: Int, cidrBlock: String, defaultForAz: Boolean,
-                    mapPublicIpOnLaunch: Boolean, state: String, tags: List[Tag]) {
+                    mapPublicIpOnLaunch: Boolean, state: String, tags: List[Tag]) extends AwsProtocol {
     private val objectMapper = new ObjectMapper()
     private val immutableMetadataKey = "immutable_metadata"
     private val nameKey = "Name"
@@ -297,7 +299,7 @@ object AwsApi {
 
   case class Vpc(vpcId: String,
                  cidrBlock: String, dhcpOptionsId: String, instanceTenancy: String, isDefault: Boolean, state: String,
-                 tags: List[Tag]) {
+                 tags: List[Tag]) extends AwsProtocol {
     def name: Option[String] = {
       val nameTagOption: Option[Tag] = tags.find(_.key == "Name")
       nameTagOption.map(_.value)

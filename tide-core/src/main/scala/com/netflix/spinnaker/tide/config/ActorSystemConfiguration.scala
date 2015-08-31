@@ -17,12 +17,13 @@
 package com.netflix.spinnaker.tide.config
 
 import com.netflix.akka.spring.AkkaConfiguration
+import com.netflix.spinnaker.config.OkHttpClientConfiguration
 import com.netflix.spinnaker.tide.actor.service.CloudDriverActor.CloudDriverInit
-import com.netflix.spinnaker.tide.model.CloudDriverService
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Value
+import org.springframework.beans.factory.annotation.{Autowired, Value}
 import org.springframework.context.annotation.{Bean, Configuration, Import, Primary}
+import retrofit.client.OkClient
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
@@ -30,6 +31,8 @@ import scala.collection.JavaConverters._
 @Configuration
 @Import(Array(classOf[AkkaConfiguration]))
 class ActorSystemConfiguration {
+
+  @Autowired var okHttpClientConfiguration: OkHttpClientConfiguration = _
 
   @Value("${akka.cluster.port:2551}") var clusterPort: String = _
   @Value("${akka.actor.system.name:default}") var actorSystemName: String = _
@@ -46,7 +49,8 @@ class ActorSystemConfiguration {
         val currentIp = sys.env("EC2_LOCAL_IPV4")
         val currentApp = sys.env("NETFLIX_APP")
         val currentAccount = sys.env("NETFLIX_ENVIRONMENT")
-        val cloudDriverService = CloudDriverInit(cloudDriverApiUrl).constructService
+        val okClient = new OkClient(okHttpClientConfiguration.create())
+        val cloudDriverService = CloudDriverInit(cloudDriverApiUrl).constructService(okClient)
         val clusterDetail = cloudDriverService.getClusterDetail(currentApp, currentAccount, currentCluster).get(0)
         val serverGroups = clusterDetail.serverGroups
         val seeds: List[String] = if (serverGroups.nonEmpty) {

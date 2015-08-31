@@ -84,7 +84,7 @@ class TaskActor extends PersistentActor with ActorLogging {
       var allWarnings: Set[Warn] = warnings
       var allMutations: Set[Mutation] = mutations
       childTasks.keySet.foreach { childTaskId =>
-        val future = (getShardCluster(TaskDirector.typeName) ? GetTask(childTaskId)).mapTo[TaskStatus]
+        val future = (getShardCluster(TaskActor.typeName) ? GetTask(childTaskId)).mapTo[TaskStatus]
         val childTaskStatus: TaskStatus = Await.result(future, timeout.duration)
         allHistory :::= childTaskStatus.history
         allWarnings ++= childTaskStatus.warnings
@@ -121,7 +121,7 @@ class TaskActor extends PersistentActor with ActorLogging {
       case event: Warn =>
         warnings += event
 
-      case event: Create =>
+      case event: Mutation =>
         mutations += event
 
       case event: TaskComplete =>
@@ -140,14 +140,14 @@ sealed trait TaskProtocol extends Serializable {
   def taskId: String
 }
 
-object TaskActor extends ClusteredActorObject with TaskActorObject {
+object TaskActor extends TaskActorObject {
   val props = Props[TaskActor]
 
   case class Log(taskId: String, message: String, timeStamp: Long = 0) extends TaskProtocol
   case class Warn(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity], message: String) extends TaskProtocol
 
   sealed trait Mutation extends TaskProtocol
-  trait Create extends Mutation{
+  trait Create extends Mutation {
     val operation = "create"
   }
   case class CreateAwsResource(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity], objectToCreate: Option[Any]= None) extends Create

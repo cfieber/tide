@@ -16,13 +16,13 @@
 
 package com.netflix.spinnaker.tide.actor.aws
 
-import akka.actor.{ActorLogging, ActorRef, PoisonPill, Props}
-import akka.contrib.pattern.ClusterSharding
+import akka.actor.{ActorLogging, PoisonPill, Props}
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.{PersistentActor, RecoveryCompleted}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
+import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{PipelineDetails, GetPipeline}
 import com.netflix.spinnaker.tide.model.Front50Service.PipelineState
-import com.netflix.spinnaker.tide.model.{PipelineDetails, GetPipeline, ClearLatestState, LatestStateTimeout}
+import com.netflix.spinnaker.tide.model.{ClearLatestState, LatestStateTimeout}
 
 import scala.concurrent.duration.DurationInt
 
@@ -76,6 +76,8 @@ class PipelineActor extends PersistentActor with ActorLogging {
 
 }
 
+sealed trait PipelineProtocol extends Serializable
+
 object PipelineActor extends ClusteredActorObject {
   val props = Props[PipelineActor]
 
@@ -91,6 +93,9 @@ object PipelineActor extends ClusteredActorObject {
     case msg: PipelineDetails =>
       (msg.id.hashCode % 10).toString
   }
+
+  case class GetPipeline(id: String) extends PipelineProtocol
+  case class PipelineDetails(id: String, state: Option[PipelineState]) extends PipelineProtocol
 
 }
 
