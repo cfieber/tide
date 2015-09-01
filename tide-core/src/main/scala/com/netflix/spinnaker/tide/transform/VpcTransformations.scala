@@ -16,7 +16,8 @@
 
 package com.netflix.spinnaker.tide.transform
 
-import com.netflix.spinnaker.tide.actor.aws.AwsApi.IpPermission
+import com.netflix.spinnaker.tide.model.AwsApi
+import AwsApi.IpPermission
 
 
 class VpcTransformations {

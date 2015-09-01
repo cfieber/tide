@@ -17,11 +17,11 @@
 package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor._
-import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.PersistentActor
-import com.netflix.spinnaker.tide.actor.aws.AwsApi.{AwsReference, ServerGroupIdentity}
-import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor._
+import com.netflix.spinnaker.tide.actor.ClusteredActorObject
+import com.netflix.spinnaker.tide.model._
+import AwsApi.{AwsReference, ServerGroupIdentity}
 import scala.concurrent.duration.DurationInt
 
 class ServerGroupActor extends PersistentActor with ActorLogging {
@@ -34,7 +34,6 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
   var latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
 
   var awsReference: AwsReference[ServerGroupIdentity] = _
-  var cloudDriver: Option[ActorRef] = None
   var latestState: Option[ServerGroupLatestState] = None
 
   override def postStop(): Unit = latestStateTimeout.cancel()
@@ -43,7 +42,7 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
     case wrapper: AwsResourceProtocol[_] =>
       val reference = wrapper.awsReference.asInstanceOf[AwsReference[ServerGroupIdentity]]
       val serverGroupEvent = wrapper.event.asInstanceOf[ServerGroupEvent]
-      handleAwsResourceProtocol(reference, serverGroupEvent, wrapper.cloudDriver)
+      handleAwsResourceProtocol(reference, serverGroupEvent)
 
     case LatestStateTimeout =>
       latestState = None
@@ -51,14 +50,14 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
     case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
   }
 
-  private def handleAwsResourceProtocol(newAwsReference: AwsReference[ServerGroupIdentity], event: ServerGroupEvent,
-                                        newCloudDriverReference: Option[ActorRef]) = event match {
+  private def handleAwsResourceProtocol(newAwsReference: AwsReference[ServerGroupIdentity],
+                                        event: ServerGroupEvent) = event match {
     case event: GetServerGroup =>
-      updateReferences(newCloudDriverReference, newAwsReference)
+      updateReferences(newAwsReference)
       sender() ! new ServerGroupDetails(newAwsReference, latestState)
 
     case event: ServerGroupLatestState =>
-      updateReferences(newCloudDriverReference, newAwsReference)
+      updateReferences(newAwsReference)
       latestStateTimeout.cancel()
       latestStateTimeout = scheduler.scheduleOnce(60 seconds, self, LatestStateTimeout)
       if (latestState != Option(event)) {
@@ -68,10 +67,7 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
       }
   }
 
-  private def updateReferences(newCloudDriverRefeence: Option[ActorRef], newAwsReference: AwsReference[ServerGroupIdentity]) = {
-    if (newCloudDriverRefeence.isDefined) {
-      cloudDriver = newCloudDriverRefeence
-    }
+  private def updateReferences(newAwsReference: AwsReference[ServerGroupIdentity]) = {
     awsReference = newAwsReference
   }
 
@@ -90,23 +86,8 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
 
 }
 
-object ServerGroupActor {
-  type Ref = ActorRef
-  val typeName: String = this.getClass.getCanonicalName
-
-  def startCluster(clusterSharding: ClusterSharding) = {
-    clusterSharding.start(
-      typeName = typeName,
-      entryProps = Some(Props[ServerGroupActor]),
-      idExtractor = {
-        case msg: AwsResourceProtocol[_] =>
-          (msg.akkaIdentifier, msg)
-      },
-      shardResolver = {
-        case msg: AwsResourceProtocol[_] =>
-          (msg.akkaIdentifier.hashCode % 10).toString
-      })
-  }
+object ServerGroupActor extends ClusteredActorObject {
+  val props = Props[ServerGroupActor]
 }
 
 

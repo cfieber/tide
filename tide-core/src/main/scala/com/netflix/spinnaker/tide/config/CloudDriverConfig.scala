@@ -17,7 +17,7 @@
 package com.netflix.spinnaker.tide.config
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.netflix.spinnaker.tide.api.CloudDriverService
+import com.netflix.spinnaker.tide.model.CloudDriverService
 import org.springframework.beans.factory.annotation.{Value, Autowired}
 import org.springframework.context.annotation.{Bean, Configuration}
 import retrofit.converter.JacksonConverter

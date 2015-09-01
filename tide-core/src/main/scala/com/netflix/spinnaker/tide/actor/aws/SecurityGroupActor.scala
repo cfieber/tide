@@ -20,9 +20,10 @@ import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.{RecoveryCompleted, PersistentActor}
-import com.netflix.spinnaker.tide.actor.aws.AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.ResourceEventRoutingActor._
-import com.netflix.spinnaker.tide.api.UpsertSecurityGroupOperation
+import com.netflix.spinnaker.tide.actor.ClusteredActorObject
+import com.netflix.spinnaker.tide.actor.service.{CloudDriverActor, ConstructCloudDriverOperations}
+import com.netflix.spinnaker.tide.model._
+import AwsApi._
 import scala.concurrent.duration.DurationInt
 
 class SecurityGroupActor extends PersistentActor with ActorLogging {
@@ -33,8 +34,9 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
   private implicit val dispatcher = context.dispatcher
   var latestStateTimeout = scheduler.scheduleOnce(20 seconds, self, LatestStateTimeout)
 
+  val clusterSharding = ClusterSharding.get(context.system)
+
   var awsReference: AwsReference[SecurityGroupIdentity] = _
-  var cloudDriver: Option[ActorRef] = None
   var desiredState: Option[UpsertSecurityGroup] = None
   var latestState: Option[SecurityGroupLatestState] = None
 
@@ -43,7 +45,7 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
   override def receiveCommand: Receive = {
     case wrapper: AwsResourceProtocol[_] =>
       handleAwsResourceProtocol(wrapper.awsReference.asInstanceOf[AwsReference[SecurityGroupIdentity]],
-        wrapper.event.asInstanceOf[SecurityGroupEvent], wrapper.cloudDriver)
+        wrapper.event.asInstanceOf[SecurityGroupEvent])
 
     case LatestStateTimeout =>
       if (latestState.isDefined) {
@@ -59,22 +61,22 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
       desiredState.foreach(mutate)
   }
 
-  private def handleAwsResourceProtocol(newAwsReference: AwsReference[SecurityGroupIdentity], event: SecurityGroupEvent,
-                                        newCloudDriverReference: Option[ActorRef]) = event match {
+  private def handleAwsResourceProtocol(newAwsReference: AwsReference[SecurityGroupIdentity],
+                                        event: SecurityGroupEvent) = event match {
 
     case event: GetSecurityGroup =>
-      updateReferences(newAwsReference, newCloudDriverReference)
+      updateReferences(newAwsReference)
       sender() ! new SecurityGroupDetails(newAwsReference, latestState, desiredState)
 
     case event: UpsertSecurityGroup =>
-      updateReferences(newAwsReference, newCloudDriverReference)
+      updateReferences(newAwsReference)
       if (desiredState != Option(event)) {
         persist(event) { e => updateState(event) }
       }
       self ! MutateState()
 
     case event: SecurityGroupLatestState =>
-      updateReferences(newAwsReference, newCloudDriverReference)
+      updateReferences(newAwsReference)
       latestStateTimeout.cancel()
       latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
       if (latestState != Option(event)) {
@@ -84,20 +86,21 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
   }
 
   private def mutate(upsertSecurityGroup: UpsertSecurityGroup) = {
+    val cloudDriverActor = clusterSharding.shardRegion(CloudDriverActor.typeName)
     latestState match {
       case None =>
-        cloudDriver.foreach { cloudDriverActor =>
-          val stateWithoutIngress = upsertSecurityGroup.state.copy(ipPermissions = Set())
-          val eventWithoutIngress = upsertSecurityGroup.copy(state = stateWithoutIngress)
-          cloudDriverActor ! AwsResourceProtocol(awsReference, eventWithoutIngress)
-          cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
-        }
+        val stateWithoutIngress = upsertSecurityGroup.state.copy(ipPermissions = Set())
+        val eventWithoutIngress = upsertSecurityGroup.copy(state = stateWithoutIngress)
+        cloudDriverActor ! AwsResourceProtocol(awsReference, eventWithoutIngress)
+        cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
       case Some(latest) =>
-        if(UpsertSecurityGroupOperation.from(awsReference, latest.state) == UpsertSecurityGroupOperation.from(awsReference, upsertSecurityGroup.state)) {
+        val latestOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, latest.state)
+        val upsertOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, upsertSecurityGroup.state)
+        if (latestOp == upsertOp) {
           persist(ClearDesiredState())(it => updateState(it))
         } else {
           if (upsertSecurityGroup.overwrite || latest.state.ipPermissions.isEmpty) {
-            cloudDriver.foreach(_ ! AwsResourceProtocol(awsReference, upsertSecurityGroup))
+            cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
           } else {
             persist(ClearDesiredState())(it => updateState(it))
           }
@@ -105,10 +108,7 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
     }
   }
 
-  private def updateReferences(awsReference: AwsReference[SecurityGroupIdentity], newCloudDriverReference: Option[ActorRef]) = {
-    if (newCloudDriverReference.isDefined) {
-      cloudDriver = newCloudDriverReference
-    }
+  private def updateReferences(awsReference: AwsReference[SecurityGroupIdentity]) = {
     this.awsReference = awsReference
   }
 
@@ -134,21 +134,6 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
 
 }
 
-object SecurityGroupActor {
-  type Ref = ActorRef
-  val typeName: String = this.getClass.getCanonicalName
-
-  def startCluster(clusterSharding: ClusterSharding) = {
-    clusterSharding.start(
-      typeName = typeName,
-      entryProps = Some(Props[SecurityGroupActor]),
-      idExtractor = {
-        case msg: AwsResourceProtocol[_] =>
-          (msg.akkaIdentifier, msg)
-      },
-      shardResolver = {
-        case msg: AwsResourceProtocol[_] =>
-          (msg.akkaIdentifier.hashCode % 10).toString
-      })
-  }
+object SecurityGroupActor extends ClusteredActorObject {
+  val props = Props[SecurityGroupActor]
 }
