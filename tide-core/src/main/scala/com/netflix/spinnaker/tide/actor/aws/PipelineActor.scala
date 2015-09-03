@@ -17,7 +17,7 @@
 package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{ActorLogging, PoisonPill, Props}
-import akka.contrib.pattern.ShardRegion.Passivate
+import akka.contrib.pattern.ShardRegion._
 import akka.persistence.{PersistentActor, RecoveryCompleted}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{PipelineDetails, GetPipeline}
@@ -76,21 +76,19 @@ class PipelineActor extends PersistentActor with ActorLogging {
 
 }
 
-sealed trait PipelineProtocol extends Serializable
+sealed trait PipelineProtocol extends Serializable {
+  def id: String
+}
 
 object PipelineActor extends ClusteredActorObject {
   val props = Props[PipelineActor]
 
-  override def idExtractor = {
-    case msg: GetPipeline =>
-      (msg.id, msg)
-    case msg: PipelineDetails =>
+  override def idExtractor: IdExtractor = {
+    case msg: PipelineProtocol =>
       (msg.id, msg)
   }
-  override def shardResolver = {
-    case msg: GetPipeline =>
-      (msg.id.hashCode % 10).toString
-    case msg: PipelineDetails =>
+  override def shardResolver: ShardResolver = {
+    case msg: PipelineProtocol =>
       (msg.id.hashCode % 10).toString
   }
 

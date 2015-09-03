@@ -19,6 +19,7 @@ package com.netflix.spinnaker.tide.model
 import com.fasterxml.jackson.annotation.{JsonProperty, JsonIgnore, JsonUnwrapped}
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
+import com.netflix.spinnaker.tide.actor.task.TaskActor.Create
 
 sealed trait AwsProtocol extends Serializable
 
@@ -37,7 +38,7 @@ object AwsApi {
   def getVpcNameFromSubnetType(subnetTypeOption: Option[String]): Option[String] = {
     subnetTypeOption match {
       case Some(subnetType) =>
-        val pattern = """(.*) \((\.+)\)""".r
+        val pattern = """(.*) \((.+)\)""".r
         pattern.findFirstMatchIn(subnetType) match {
           case Some(m) if m.groupCount == 2 => Option(m.group(2))
           case _ => Option("Main")
@@ -70,6 +71,9 @@ object AwsApi {
   case class AwsReference[T <: AwsIdentity](location: AwsLocation, identity: T) extends AkkaClustered {
     @JsonIgnore override def akkaIdentifier = s"${location.akkaIdentifier}.${identity.akkaIdentifier}"
   }
+
+  case class CreateAwsResource(taskId: String, awsReference: AwsReference[_ <: AwsIdentity],
+                               referencedBy: Option[AwsReference[_]], objectToCreate: Option[Any]= None) extends Create
 
   case class SecurityGroup(groupId: String,
                            @JsonUnwrapped @JsonProperty("name") identity: SecurityGroupIdentity,

@@ -150,7 +150,6 @@ object TaskActor extends TaskActorObject {
   trait Create extends Mutation {
     val operation = "create"
   }
-  case class CreateAwsResource(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity], objectToCreate: Option[Any]= None) extends Create
 
   case class GetTask(taskId: String) extends TaskProtocol
   case class TaskStatus(taskId: String, parentTaskId: Option[String], taskDescription: TaskDescription,
