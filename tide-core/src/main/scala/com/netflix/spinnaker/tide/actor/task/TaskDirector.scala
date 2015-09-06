@@ -62,6 +62,9 @@ class TaskDirector extends PersistentActor with ActorLogging {
       }
 
     case childTasks: ChildTaskDescriptions =>
+      if (childTasks.descriptions.isEmpty) {
+        sender() ! ChildTaskGroupComplete(childTasks.parentTaskId, Nil)
+      }
       val taskCluster = getShardCluster(TaskActor.typeName)
       val executeTasks: List[ExecuteTask] = childTasks.descriptions.map { taskDescription =>
         val executeTask = ExecuteTask(nextTaskId.toString, taskDescription, Option(childTasks.parentTaskId))
