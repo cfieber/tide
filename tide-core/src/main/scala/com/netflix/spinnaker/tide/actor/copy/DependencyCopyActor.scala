@@ -150,7 +150,9 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               }
               val targetResource = resourceTracker.transformToTarget(resource)
               val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
-              sendTaskEvent(CreateAwsResource(taskId, targetResource.ref, referencingSource))
+              if (resourceTracker.isNonexistentTarget(targetResource)) {
+                sendTaskEvent(CreateAwsResource(taskId, targetResource.ref, referencingSource))
+              }
               if (task.dryRun) {
                 self ! FoundTarget(targetResource)
               } else {
@@ -194,7 +196,9 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               }
               val targetResource = resourceTracker.transformToTarget(resource)
               val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
-              sendTaskEvent(CreateAwsResource(taskId, targetResource.ref, referencingSource))
+              if (resourceTracker.isNonexistentTarget(targetResource)) {
+                sendTaskEvent(CreateAwsResource(taskId, targetResource.ref, referencingSource))
+              }
               if (task.dryRun) {
                 self ! FoundTarget(targetResource)
               } else {
