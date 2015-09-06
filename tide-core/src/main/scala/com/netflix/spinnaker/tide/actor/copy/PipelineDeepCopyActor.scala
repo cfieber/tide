@@ -136,10 +136,7 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
             DependencyCopyTask(sourceVpcLocation, targetVpcLocation, securityGroupNames,
               dependencies.loadBalancersNames, dryRun = task.dryRun)
           }
-          dependencyCopyTasks match {
-            case Nil => self ! StartPipelineCloning(Map())
-            case _ => startChildTasks(ChildTaskDescriptions(taskId, dependencyCopyTasks))
-          }
+          startChildTasks(ChildTaskDescriptions(taskId, dependencyCopyTasks))
       }
 
     case event: StartPipelineCloning =>
