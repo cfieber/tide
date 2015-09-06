@@ -30,7 +30,7 @@ class PipelineTest extends FlatSpec with GivenWhenThen with DiagrammedAssertions
 
   behavior of "Pipeline"
 
-  val singleDeploymentPipeline = PipelineState("deploy testApp", "testApp",
+  val singleDeploymentPipeline = PipelineState("deploy testApp", "testApp", parallel = false,
     List(Map(
       "enabled" -> true,
       "type" -> "jenkins",
@@ -113,7 +113,7 @@ class PipelineTest extends FlatSpec with GivenWhenThen with DiagrammedAssertions
     val migratedPipeline = pipeline.applyVisitor(migrator)
 
     Then("dependencies are collected")
-    val expectedPipeline = PipelineState("deploy testApp", "testApp",
+    val expectedPipeline = PipelineState("deploy testApp", "testApp", parallel = false,
       List(Map(
         "enabled" -> true,
         "type" -> "jenkins",

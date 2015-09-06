@@ -33,7 +33,7 @@ object Front50Service {
 
   case class Pipeline(id: String, @JsonUnwrapped @JsonProperty("state") state: PipelineState)
 
-  case class PipelineState(name: String, application: String, triggers: List[Map[String, Any]],
+  case class PipelineState(name: String, application: String, parallel: Boolean, triggers: List[Map[String, Any]],
                            stages: List[Map[String, Any]]) {
 
     def disableTriggers(): PipelineState = {

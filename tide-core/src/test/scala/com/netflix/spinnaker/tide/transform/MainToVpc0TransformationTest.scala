@@ -17,7 +17,7 @@
 package com.netflix.spinnaker.tide.transform
 
 import com.netflix.spinnaker.tide.model.AwsApi
-import AwsApi.{UserIdGroupPairs, IpPermission}
+import com.netflix.spinnaker.tide.model.AwsApi._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.prop.TableDrivenPropertyChecks
@@ -44,7 +44,8 @@ class MainToVpc0TransformationTest extends FlatSpec with GivenWhenThen with Diag
     )
 
     When("translated")
-    val translatedIpPermissions = mainToVpc0Transformation.translateIpPermissions(ipPermissions)
+    val translatedIpPermissions = mainToVpc0Transformation.translateIpPermissions(
+      AwsReference(AwsLocation("test", "us-west-1"), SecurityGroupIdentity("sg1")), SecurityGroupState("", ipPermissions))
 
     Then("10. and 100. are removed, Nat IPs are mapped, and the rest is left alone")
     val expectedIpPermissions = Set(
@@ -57,6 +58,19 @@ class MainToVpc0TransformationTest extends FlatSpec with GivenWhenThen with Diag
       IpPermission(7001, 7008, "TCP", Set("184.72.105.251/32", "107.21.35.88/32", "54.244.37.231/32", "54.165.127.252/30", "1.0.2.1/32", "54.218.127.176/30"), Set())
     )
     assert(translatedIpPermissions == expectedIpPermissions)
+
+    Then("logs explain the changes made")
+    val expectedLog = Set(
+      "Added NAT IP Range 54.165.127.252/30 when copying test.us-west-1.SecurityGroup.sg1..",
+      "Added NAT IP Range 54.218.127.176/30 when copying test.us-west-1.SecurityGroup.sg1..",
+      "Did not copy IP range 100.9.1.1/32 from test.us-west-1.SecurityGroup.sg1. because 10. and 100. rules are redundant in VPC 0.",
+      "Did not copy IP range 10.9.1.1/32 from test.us-west-1.SecurityGroup.sg1. because 10. and 100. rules are redundant in VPC 0.",
+      "Did not copy IP range 100.9.2.1/32 from test.us-west-1.SecurityGroup.sg1. because 10. and 100. rules are redundant in VPC 0.",
+      "Did not copy IP range 10.9.2.1/32 from test.us-west-1.SecurityGroup.sg1. because 10. and 100. rules are redundant in VPC 0.",
+      "Did not copy IP range 100.9.3.1/32 from test.us-west-1.SecurityGroup.sg1. because 10. and 100. rules are redundant in VPC 0.",
+      "Did not copy IP range 10.9.3.1/32 from test.us-west-1.SecurityGroup.sg1. because 10. and 100. rules are redundant in VPC 0."
+    )
+    assert(mainToVpc0Transformation.log.toSet == expectedLog)
   }
 
 }

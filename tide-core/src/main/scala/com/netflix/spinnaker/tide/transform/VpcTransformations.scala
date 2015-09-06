@@ -16,8 +16,7 @@
 
 package com.netflix.spinnaker.tide.transform
 
-import com.netflix.spinnaker.tide.model.AwsApi
-import AwsApi.IpPermission
+import com.netflix.spinnaker.tide.model.AwsApi.{AwsReference, SecurityGroupIdentity, SecurityGroupState, IpPermission}
 
 
 class VpcTransformations {
@@ -32,12 +31,14 @@ class VpcTransformations {
 }
 
 trait VpcTransformation {
-  def translateIpPermissions(ipPermissions: Set[IpPermission]): Set[IpPermission]
+  def translateIpPermissions(reference: AwsReference[SecurityGroupIdentity], securityGroupState: SecurityGroupState): Set[IpPermission]
+  def log: List[String]
 }
 
 class NoOpVpcTransformation extends VpcTransformation {
-  def translateIpPermissions(ipPermissions: Set[IpPermission]): Set[IpPermission] = {
-    ipPermissions
+  def translateIpPermissions(reference: AwsReference[SecurityGroupIdentity], securityGroupState: SecurityGroupState): Set[IpPermission] = {
+    securityGroupState.ipPermissions
   }
+  override def log: List[String] = Nil
 }
 

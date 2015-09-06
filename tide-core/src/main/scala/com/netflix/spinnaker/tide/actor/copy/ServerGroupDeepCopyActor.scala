@@ -30,7 +30,7 @@ import com.netflix.spinnaker.tide.actor.service.CloudDriverActor.{CloudDriverRes
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
 import com.netflix.spinnaker.tide.actor.task.TaskDirector.{ChildTaskDescriptions, TaskDescription}
 import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector, TaskProtocol}
-import com.netflix.spinnaker.tide.model.AwsApi.{AutoScalingGroupIdentity, VpcLocation, AwsReference}
+import com.netflix.spinnaker.tide.model.AwsApi.{CreateAwsResource, AutoScalingGroupIdentity, VpcLocation, AwsReference}
 import com.netflix.spinnaker.tide.model._
 
 import scala.concurrent.Await
@@ -126,7 +126,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
         val cloneServerGroup = CloneServerGroup(newAutoScalingGroup, newLaunchConfiguration, startDisabled = true)
         if (task.dryRun) {
           val nextAsgIdentity = task.source.identity.nextGroup
-          sendTaskEvent(CreateAwsResource(taskId, AwsReference(task.target.location, nextAsgIdentity), Option(cloneServerGroup)))
+          sendTaskEvent(CreateAwsResource(taskId, AwsReference(task.target.location, nextAsgIdentity), None, Option(cloneServerGroup)))
           self ! TaskSuccess(taskId, task, ServerGroupDeepCopyTaskResult(Seq(nextAsgIdentity.autoScalingGroupName)))
         } else {
           sendTaskEvent(Log(taskId, s"Cloning server group ${task.source.akkaIdentifier}"))
@@ -158,7 +158,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
               self ! TaskSuccess(taskId, task, ServerGroupDeepCopyTaskResult(taskDetail.getCreatedServerGroups))
               taskDetail.getCreatedServerGroups.foreach { groupName =>
                 val reference = AwsReference(task.target.location, AutoScalingGroupIdentity(groupName))
-                sendTaskEvent(CreateAwsResource(taskId, reference))
+                sendTaskEvent(CreateAwsResource(taskId, reference, None))
               }
             }
           } else {
