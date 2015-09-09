@@ -3,6 +3,10 @@ package com.netflix.spinnaker.tide.actor.comparison
 case class AttributeDiff[T] private[AttributeDiff] (allIdentifiers: Set[T],
                                                     attributeGroups: List[AttributeGroup[T]]) {
 
+  def removeResource(newIdentifier: T): AttributeDiff[T] = {
+    AttributeDiff(allIdentifiers - newIdentifier, AttributeDiff.removeIdentifierFromAttributeGroups(newIdentifier, attributeGroups))
+  }
+
   def compareResource(newIdentifier: T, resource: Product): AttributeDiff[T] = {
     val attributeGroupsWithIdentifierRemoved = AttributeDiff.
       removeIdentifierFromAttributeGroups(newIdentifier, attributeGroups)

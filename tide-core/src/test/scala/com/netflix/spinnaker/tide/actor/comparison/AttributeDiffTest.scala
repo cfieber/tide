@@ -165,4 +165,23 @@ class AttributeDiffTest extends FunSpec with GivenWhenThen with DiagrammedAssert
     }
   }
 
+  it("should remove object") {
+    val initialDiff = attributeDiff.
+      compareResource(1, Foo(1, "a", None, Set())).
+      compareResource(2, Foo(2, "b", None, Set())).
+      compareResource(3, Foo(2, "a", None, Set()))
+
+    When("removeResource")
+    val actual = initialDiff.removeResource(2)
+
+    Then("it is removed from attributes")
+    assert(actual.allIdentifiers == Set(1, 3))
+    val expectedGroups = Set(
+      AttributeGroup(Set(1, 3), Map("opt" -> None, "set" -> Set())),
+      AttributeGroup(Set(1, 3), Map("s" -> "a")),
+      AttributeGroup(Set(3), Map("i" -> 2)),
+      AttributeGroup(Set(1), Map("i" -> 1))
+    )
+    assert(actual.attributeGroups.toSet == expectedGroups)
+  }
 }
