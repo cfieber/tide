@@ -21,6 +21,8 @@ import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.WebModel.{PipelineVpcMigrateDefinition, DependencyCopyDefinition, VpcDefinition}
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{GetPipeline, PipelineDetails}
+import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor.{ServerGroupComparableAttributes, GetServerGroupDiff}
+import com.netflix.spinnaker.tide.actor.comparison.{AttributeDiff, AttributeDiffActor}
 import com.netflix.spinnaker.tide.actor.copy.{ServerGroupDeepCopyActor, PipelineDeepCopyActor}
 import com.netflix.spinnaker.tide.model.AwsApi._
 import com.netflix.spinnaker.tide.model._
@@ -46,10 +48,7 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
 
   implicit val timeout = Timeout(5 seconds)
 
-  def taskDirector: ActorRef = {
-    clusterSharding.shardRegion(TaskDirector.typeName)
-  }
-
+  def taskDirector: ActorRef = clusterSharding.shardRegion(TaskDirector.typeName)
   def securityGroupCluster = clusterSharding.shardRegion(SecurityGroupActor.typeName)
   def loadBalancerCluster = clusterSharding.shardRegion(LoadBalancerActor.typeName)
   def pipelineCluster = clusterSharding.shardRegion(PipelineActor.typeName)
@@ -175,5 +174,6 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
     val task = Await.result(future, timeout.duration)
     task.taskId
   }
+
 }
 

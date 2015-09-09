@@ -21,9 +21,14 @@ import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
+import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor.{SecurityGroupComparableAttributes, DiffSecurityGroup}
+import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor.DiffServerGroup
+import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor
+import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor.{GetDiff, DiffAttributes}
 import com.netflix.spinnaker.tide.actor.service.{CloudDriverActor, ConstructCloudDriverOperations}
 import com.netflix.spinnaker.tide.model._
 import AwsApi._
+import scala.beans.BeanProperty
 import scala.concurrent.duration.DurationInt
 
 class SecurityGroupActor extends PersistentActor with ActorLogging {
@@ -49,7 +54,11 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
 
     case LatestStateTimeout =>
       if (latestState.isDefined) {
-        persist(ClearLatestState()) { it => updateState(it) }
+        persist(ClearLatestState()) { it =>
+          updateState(it)
+          val comparableEvent = DiffSecurityGroup(awsReference, None)
+          clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
+        }
       } else {
         context.parent ! Passivate(stopMessage = PoisonPill)
       }
@@ -80,7 +89,12 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
       latestStateTimeout.cancel()
       latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
       if (latestState != Option(event)) {
-        persist(event) { e => updateState(event) }
+        persist(event) { e =>
+          updateState(event)
+          val comparableEvent = DiffSecurityGroup(awsReference,
+            Option(SecurityGroupComparableAttributes.from(event.state)))
+          clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
+        }
       }
       self ! MutateState()
   }
@@ -136,4 +150,28 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
 
 object SecurityGroupActor extends ClusteredActorObject {
   val props = Props[SecurityGroupActor]
+
+  case class DiffSecurityGroup(identity: AwsReference[SecurityGroupIdentity],
+                             attributes: Option[SecurityGroupComparableAttributes])
+    extends DiffAttributes[AwsReference[SecurityGroupIdentity]] {
+    override def akkaIdentifier: String = {
+      s"${identity.location.account}.${identity.identity.groupName}"
+    }
+  }
+
+  case class GetSecurityGroupDiff(account: String, name: String) extends GetDiff {
+    override def akkaIdentifier: String = {
+      s"$account.$name"
+    }
+  }
+
+  case class SecurityGroupComparableAttributes(
+                                                @BeanProperty description: String,
+                                                @BeanProperty ipPermissions: Set[IpPermission])
+
+  object SecurityGroupComparableAttributes {
+    def from(state: SecurityGroupState): SecurityGroupComparableAttributes = {
+      SecurityGroupComparableAttributes(state.description, state.ipPermissions)
+    }
+  }
 }
