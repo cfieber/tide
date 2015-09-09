@@ -21,9 +21,14 @@ import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
+import com.netflix.spinnaker.tide.actor.aws.LoadBalancerActor.{LoadBalancerComparableAttributes, DiffLoadBalancer}
+import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor.DiffServerGroup
+import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor
+import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor.{GetDiff, DiffAttributes}
 import com.netflix.spinnaker.tide.actor.service.{CloudDriverActor, ConstructCloudDriverOperations}
 import com.netflix.spinnaker.tide.model._
-import AwsApi.{AwsReference, LoadBalancerIdentity}
+import com.netflix.spinnaker.tide.model.AwsApi._
+import scala.beans.BeanProperty
 import scala.concurrent.duration.DurationInt
 
 class LoadBalancerActor extends PersistentActor with ActorLogging {
@@ -49,7 +54,11 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
 
     case LatestStateTimeout =>
       if (latestState.isDefined) {
-        persist(ClearLatestState()) { it => updateState(it) }
+        persist(ClearLatestState()) { it =>
+          updateState(it)
+          val comparableEvent = DiffLoadBalancer(awsReference, None)
+          clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
+        }
       } else {
         context.parent ! Passivate(stopMessage = PoisonPill)
       }
@@ -79,7 +88,12 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
       latestStateTimeout.cancel()
       latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
       if (latestState != Option(event)) {
-        persist(event) { e => updateState(event) }
+        persist(event) { e =>
+          updateState(event)
+          val comparableEvent = DiffLoadBalancer(awsReference,
+            Option(LoadBalancerComparableAttributes.from(event.state)))
+          clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
+        }
       }
       self ! MutateState()
   }
@@ -132,5 +146,44 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
 
 object LoadBalancerActor extends ClusteredActorObject {
   val props = Props[LoadBalancerActor]
+
+  case class DiffLoadBalancer(identity: AwsReference[LoadBalancerIdentity],
+                             attributes: Option[LoadBalancerComparableAttributes])
+    extends DiffAttributes[AwsReference[LoadBalancerIdentity]] {
+    override def akkaIdentifier: String = {
+      s"${identity.location.account}.${identity.identity.loadBalancerName}"
+    }
+  }
+
+  case class GetLoadBalancerDiff(account: String, name: String) extends GetDiff {
+    override def akkaIdentifier: String = {
+      s"$account.$name"
+    }
+  }
+
+  case class LoadBalancerComparableAttributes(
+      @BeanProperty availabilityZones: Set[String],
+      @BeanProperty healthCheck: HealthCheck,
+      @BeanProperty listenerDescriptions: Set[ListenerDescription],
+      @BeanProperty scheme: String,
+      @BeanProperty securityGroups: Set[String],
+      @BeanProperty sourceSecurityGroup: ElbSourceSecurityGroup,
+      @BeanProperty subnets: Set[String],
+      @BeanProperty subnetType: Option[String])
+
+  object LoadBalancerComparableAttributes {
+    def from(state: LoadBalancerState): LoadBalancerComparableAttributes = {
+      LoadBalancerComparableAttributes(
+        state.availabilityZones,
+        state.healthCheck,
+        state.listenerDescriptions,
+        state.scheme,
+        state.securityGroups,
+        state.sourceSecurityGroup,
+        state.subnets,
+        state.subnetType
+      )
+    }
+  }
 }
 

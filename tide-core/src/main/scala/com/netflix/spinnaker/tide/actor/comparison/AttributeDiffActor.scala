@@ -3,6 +3,7 @@ package com.netflix.spinnaker.tide.actor.comparison
 import akka.actor.{Props, ActorLogging}
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
+import com.netflix.spinnaker.tide.actor.aws.LoadBalancerActor.DiffLoadBalancer
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor.{DiffAttributes, GetDiff}
 import com.netflix.spinnaker.tide.model._
 
