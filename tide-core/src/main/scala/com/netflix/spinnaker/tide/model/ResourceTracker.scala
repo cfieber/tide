@@ -53,7 +53,7 @@ case class ResourceTracker(source: VpcLocation, target: VpcLocation, vpcIds: Vpc
   def transformToTarget[T <: AwsIdentity](sourceResource: SourceResource[T]): TargetResource[T] = {
     val targetIdentity: T = sourceResource.ref.identity match {
       case sourceIdentity: LoadBalancerIdentity =>
-        sourceIdentity.forVpc(target.vpcName).asInstanceOf[T]
+        sourceIdentity.forVpc(source.vpcName, target.vpcName).asInstanceOf[T]
       case sourceIdentity: SecurityGroupIdentity =>
         sourceIdentity.dropLegacySuffix.copy(vpcId = vpcIds.target).asInstanceOf[T]
     }

@@ -137,55 +137,28 @@ object AwsApi {
   case class LoadBalancerIdentity(loadBalancerName: String) extends AwsIdentity {
     @JsonIgnore def akkaIdentifier: String = s"LoadBalancer.$loadBalancerName"
 
-    @JsonIgnore def forVpc(vpcNameOption: Option[String]): LoadBalancerIdentity = {
-      vpcNameOption match {
-        case None => this
-        case Some(vpcName) =>
-          val dropSuffix = loadBalancerName match {
-            case s if s.endsWith("-frontend") =>
-              s"${s.dropRight("-frontend".length)}"
-            case s if s.endsWith("-vpc") =>
-              s"${loadBalancerName.dropRight("-vpc".length)}"
-            case s if s.endsWith(s"-$vpcName") =>
-              loadBalancerName.dropRight(s"-$vpcName".length)
-            case s => s
-          }
-          val abbreviateIfNeeded = if (s"$dropSuffix-$vpcName".length > 32) {
-            dropSuffix.
-              replace("internal", "i").
-              replace("int", "i").
-              replace("external", "e").
-              replace("ext", "e").
-              replace("elb", "").
-              replace("dev", "d").
-              replace("test", "t").
-              replace("prod", "p").
-              replace("main", "m").
-              replace("classic", "c").
-              replace("legacy", "l").
-              replace("backend", "b").
-              replace("frontend", "f").
-              replace("front", "f").
-              replace("release", "r").
-              replace("private", "p").
-              replace("edge", "e").
-              replace("global", "g").
-              replace("east", "e").
-              replace("west", "w").
-              replace("north", "n").
-              replace("south", "s").
-              replace("vpc", "")
-          } else {
-            dropSuffix
-          }
-          val newLoadBalancerName = if (s"$abbreviateIfNeeded-$vpcName".length > 32) {
-            val excessLength = s"$abbreviateIfNeeded-$vpcName".length - 32
-            abbreviateIfNeeded.dropRight(excessLength)
-          } else {
-            abbreviateIfNeeded
-          }
-          LoadBalancerIdentity(s"$newLoadBalancerName-$vpcName")
+    @JsonIgnore def forVpc(sourceVpcNameOption: Option[String], targetVpcNameOption: Option[String]): LoadBalancerIdentity = {
+      val sourceVpcNameRemoved = sourceVpcNameOption match {
+        case Some(vpcName) if loadBalancerName.endsWith(s"-$vpcName") =>
+          loadBalancerName.dropRight(s"-$vpcName".length)
+        case _ => loadBalancerName
       }
+      val legacySuffixesRemoved = sourceVpcNameRemoved match {
+        case s if s.endsWith("-frontend") =>
+          s.dropRight("-frontend".length)
+        case s if s.endsWith("-vpc") =>
+          s.dropRight("-vpc".length)
+        case s => s
+      }
+
+      val truncateAsLastResort = new LoadBalancerNameShortener().
+        shorten(legacySuffixesRemoved, 32 - (targetVpcNameOption.getOrElse("").length + 1))
+
+      val targetVpcNameAdded = targetVpcNameOption match {
+        case Some(vpcName) => s"$truncateAsLastResort-$vpcName"
+        case _ => truncateAsLastResort
+      }
+      LoadBalancerIdentity(targetVpcNameAdded)
     }
 
     @JsonIgnore def isConsistentWithVpc(vpcNameOption: Option[String]): Boolean = {
@@ -279,10 +252,11 @@ object AwsApi {
                                    maxSize: Int, minSize: Int, suspendedProcesses: Set[SuspendedProcess],
                                    terminationPolicies: Set[String],
                                    subnetType: Option[String], vpcName: Option[String]) extends AwsProtocol {
-    def forVpc(vpcName: Option[String]): AutoScalingGroupState = {
-      val newLoadBalancerNames = loadBalancerNames.map(LoadBalancerIdentity(_).forVpc(vpcName).loadBalancerName)
-      this.copy(loadBalancerNames = newLoadBalancerNames, vpcName = vpcName,
-        subnetType = constructTargetSubnetType(subnetType, vpcName))
+    def forVpc(sourceVpcName: Option[String], targetVpcName: Option[String]): AutoScalingGroupState = {
+      val newLoadBalancerNames = loadBalancerNames.map(LoadBalancerIdentity(_).
+        forVpc(sourceVpcName, targetVpcName).loadBalancerName)
+      this.copy(loadBalancerNames = newLoadBalancerNames, vpcName = targetVpcName,
+        subnetType = constructTargetSubnetType(subnetType, targetVpcName))
     }
 
     def withCapacity(size: Int): AutoScalingGroupState = {

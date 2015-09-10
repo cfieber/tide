@@ -204,7 +204,7 @@ case class ClusterVpcMigrator(sourceVpcName: Option[String], targetVpcName: Stri
     if (vpcName == sourceVpcName) {
       val newSubnetType = AwsApi.constructTargetSubnetType(subnetType, Option(targetVpcName))
       val newLoadBalancers = cluster.getLoadBalancersNames.map(LoadBalancerIdentity(_)
-        .forVpc(Option(targetVpcName)).loadBalancerName)
+        .forVpc(sourceVpcName, Option(targetVpcName)).loadBalancerName)
       val newSecurityGroups = securityGroupIdMappingByLocation.get(location) match {
         case Some(securityGroupIdsSourceToTarget) =>
           cluster.getSecurityGroupIds.map(securityGroupIdsSourceToTarget.getOrElse(_, "nonexistant"))
