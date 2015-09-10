@@ -141,17 +141,50 @@ object AwsApi {
       vpcNameOption match {
         case None => this
         case Some(vpcName) =>
-          val targetName = loadBalancerName match {
+          val dropSuffix = loadBalancerName match {
             case s if s.endsWith("-frontend") =>
-              s"${s.dropRight("-frontend".length)}-$vpcName"
+              s"${s.dropRight("-frontend".length)}"
             case s if s.endsWith("-vpc") =>
-              s"${loadBalancerName.dropRight("-vpc".length)}-$vpcName"
+              s"${loadBalancerName.dropRight("-vpc".length)}"
             case s if s.endsWith(s"-$vpcName") =>
-              loadBalancerName
-            case s =>
-              s"$loadBalancerName-$vpcName"
+              loadBalancerName.dropRight(s"-$vpcName".length)
+            case s => s
           }
-          LoadBalancerIdentity(targetName)
+          val abbreviateIfNeeded = if (s"$dropSuffix-$vpcName".length > 32) {
+            dropSuffix.
+              replace("internal", "i").
+              replace("int", "i").
+              replace("external", "e").
+              replace("ext", "e").
+              replace("elb", "").
+              replace("dev", "d").
+              replace("test", "t").
+              replace("prod", "p").
+              replace("main", "m").
+              replace("classic", "c").
+              replace("legacy", "l").
+              replace("backend", "b").
+              replace("frontend", "f").
+              replace("front", "f").
+              replace("release", "r").
+              replace("private", "p").
+              replace("edge", "e").
+              replace("global", "g").
+              replace("east", "e").
+              replace("west", "w").
+              replace("north", "n").
+              replace("south", "s").
+              replace("vpc", "")
+          } else {
+            dropSuffix
+          }
+          val newLoadBalancerName = if (s"$abbreviateIfNeeded-$vpcName".length > 32) {
+            val excessLength = s"$abbreviateIfNeeded-$vpcName".length - 32
+            abbreviateIfNeeded.dropRight(excessLength)
+          } else {
+            abbreviateIfNeeded
+          }
+          LoadBalancerIdentity(s"$newLoadBalancerName-$vpcName")
       }
     }
 
