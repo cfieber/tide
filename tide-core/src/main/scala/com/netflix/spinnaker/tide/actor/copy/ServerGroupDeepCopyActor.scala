@@ -121,7 +121,8 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
     case event: StartServerGroupCloning =>
       val cloudDriver = clusterSharding.shardRegion(CloudDriverActor.typeName)
       if (cloneServerGroupTaskReference.isEmpty) {
-        val newAutoScalingGroup = serverGroupState.autoScalingGroup.forVpc(task.target.vpcName).withCapacity(0)
+        val sourceVpcName = serverGroupState.autoScalingGroup.vpcName
+        val newAutoScalingGroup = serverGroupState.autoScalingGroup.forVpc(sourceVpcName, task.target.vpcName).withCapacity(0)
         val newLaunchConfiguration = serverGroupState.launchConfiguration.dropSecurityGroupNameLegacySuffixes
         val cloneServerGroup = CloneServerGroup(newAutoScalingGroup, newLaunchConfiguration, startDisabled = true)
         if (task.dryRun) {

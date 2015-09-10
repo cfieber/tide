@@ -137,22 +137,28 @@ object AwsApi {
   case class LoadBalancerIdentity(loadBalancerName: String) extends AwsIdentity {
     @JsonIgnore def akkaIdentifier: String = s"LoadBalancer.$loadBalancerName"
 
-    @JsonIgnore def forVpc(vpcNameOption: Option[String]): LoadBalancerIdentity = {
-      vpcNameOption match {
-        case None => this
-        case Some(vpcName) =>
-          val targetName = loadBalancerName match {
-            case s if s.endsWith("-frontend") =>
-              s"${s.dropRight("-frontend".length)}-$vpcName"
-            case s if s.endsWith("-vpc") =>
-              s"${loadBalancerName.dropRight("-vpc".length)}-$vpcName"
-            case s if s.endsWith(s"-$vpcName") =>
-              loadBalancerName
-            case s =>
-              s"$loadBalancerName-$vpcName"
-          }
-          LoadBalancerIdentity(targetName)
+    @JsonIgnore def forVpc(sourceVpcNameOption: Option[String], targetVpcNameOption: Option[String]): LoadBalancerIdentity = {
+      val sourceVpcNameRemoved = sourceVpcNameOption match {
+        case Some(vpcName) if loadBalancerName.endsWith(s"-$vpcName") =>
+          loadBalancerName.dropRight(s"-$vpcName".length)
+        case _ => loadBalancerName
       }
+      val legacySuffixesRemoved = sourceVpcNameRemoved match {
+        case s if s.endsWith("-frontend") =>
+          s.dropRight("-frontend".length)
+        case s if s.endsWith("-vpc") =>
+          s.dropRight("-vpc".length)
+        case s => s
+      }
+
+      val truncateAsLastResort = new LoadBalancerNameShortener().
+        shorten(legacySuffixesRemoved, 32 - (targetVpcNameOption.getOrElse("").length + 1))
+
+      val targetVpcNameAdded = targetVpcNameOption match {
+        case Some(vpcName) => s"$truncateAsLastResort-$vpcName"
+        case _ => truncateAsLastResort
+      }
+      LoadBalancerIdentity(targetVpcNameAdded)
     }
 
     @JsonIgnore def isConsistentWithVpc(vpcNameOption: Option[String]): Boolean = {
@@ -246,10 +252,11 @@ object AwsApi {
                                    maxSize: Int, minSize: Int, suspendedProcesses: Set[SuspendedProcess],
                                    terminationPolicies: Set[String],
                                    subnetType: Option[String], vpcName: Option[String]) extends AwsProtocol {
-    def forVpc(vpcName: Option[String]): AutoScalingGroupState = {
-      val newLoadBalancerNames = loadBalancerNames.map(LoadBalancerIdentity(_).forVpc(vpcName).loadBalancerName)
-      this.copy(loadBalancerNames = newLoadBalancerNames, vpcName = vpcName,
-        subnetType = constructTargetSubnetType(subnetType, vpcName))
+    def forVpc(sourceVpcName: Option[String], targetVpcName: Option[String]): AutoScalingGroupState = {
+      val newLoadBalancerNames = loadBalancerNames.map(LoadBalancerIdentity(_).
+        forVpc(sourceVpcName, targetVpcName).loadBalancerName)
+      this.copy(loadBalancerNames = newLoadBalancerNames, vpcName = targetVpcName,
+        subnetType = constructTargetSubnetType(subnetType, targetVpcName))
     }
 
     def withCapacity(size: Int): AutoScalingGroupState = {
