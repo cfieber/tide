@@ -90,14 +90,14 @@ object Front50Service {
     }
 
     def getLoadBalancersNames = {
-      attributes("loadBalancers").asInstanceOf[List[String]].toSet
+      attributes.getOrElse("loadBalancers", Nil).asInstanceOf[List[String]].toSet
     }
     def setLoadBalancersNames(newLoadBalancers: Set[String]): Cluster = {
       Cluster(attributes + ("loadBalancers" -> newLoadBalancers))
     }
 
     def getSecurityGroupIds = {
-      attributes("securityGroups").asInstanceOf[List[String]].toSet
+      attributes.getOrElse("securityGroups", Nil).asInstanceOf[List[String]].toSet
     }
     def setSecurityGroupIds(newSecurityGroupIds: Set[String]): Cluster = {
       Cluster(attributes + ("securityGroups" -> newSecurityGroupIds))
