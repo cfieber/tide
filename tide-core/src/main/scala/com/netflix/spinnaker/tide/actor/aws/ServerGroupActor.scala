@@ -115,13 +115,13 @@ object ServerGroupActor extends ClusteredActorObject {
     extends DiffAttributes[AwsReference[ServerGroupIdentity]] {
     override def akkaIdentifier: String = {
       val clusterName = Names.parseName(identity.identity.autoScalingGroupName).getCluster
-      s"${identity.location.account}.$clusterName"
+      s"ServerGroupDiff.${identity.location.account}.$clusterName"
     }
   }
 
   case class GetServerGroupDiff(account: String, clusterName: String) extends GetDiff {
     override def akkaIdentifier: String = {
-      s"$account.$clusterName"
+      s"ServerGroupDiff.$account.$clusterName"
     }
   }
 

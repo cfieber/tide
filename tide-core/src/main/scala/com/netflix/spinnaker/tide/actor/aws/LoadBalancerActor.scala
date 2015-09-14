@@ -151,13 +151,13 @@ object LoadBalancerActor extends ClusteredActorObject {
                              attributes: Option[LoadBalancerComparableAttributes])
     extends DiffAttributes[AwsReference[LoadBalancerIdentity]] {
     override def akkaIdentifier: String = {
-      s"${identity.location.account}.${identity.identity.loadBalancerName}"
+      s"LoadBalancerDiff.${identity.location.account}.${identity.identity.loadBalancerName}"
     }
   }
 
   case class GetLoadBalancerDiff(account: String, name: String) extends GetDiff {
     override def akkaIdentifier: String = {
-      s"$account.$name"
+      s"LoadBalancerDiff.$account.$name"
     }
   }
 
