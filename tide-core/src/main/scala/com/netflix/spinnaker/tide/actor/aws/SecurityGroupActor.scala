@@ -155,13 +155,13 @@ object SecurityGroupActor extends ClusteredActorObject {
                              attributes: Option[SecurityGroupComparableAttributes])
     extends DiffAttributes[AwsReference[SecurityGroupIdentity]] {
     override def akkaIdentifier: String = {
-      s"${identity.location.account}.${identity.identity.groupName}"
+      s"SecurityGroupDiff.${identity.location.account}.${identity.identity.groupName}"
     }
   }
 
   case class GetSecurityGroupDiff(account: String, name: String) extends GetDiff {
     override def akkaIdentifier: String = {
-      s"$account.$name"
+      s"SecurityGroupDiff.$account.$name"
     }
   }
 
