@@ -1,12 +1,12 @@
 package com.netflix.spinnaker.tide.controllers
 
-import akka.actor.ActorRef
+import javax.servlet.http.HttpServletRequest
+
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.task.{TaskDirector, TaskActor}
-import TaskActor.{GetTask, TaskStatus}
+import com.netflix.spinnaker.tide.actor.task.TaskActor.{RestartTask, CancelTask, GetTask, TaskStatus}
 import TaskDirector.GetRunningTasks
-import com.netflix.spinnaker.tide.actor.aws._
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RequestMethod._
 import org.springframework.web.bind.annotation._
@@ -25,6 +25,17 @@ class TaskController @Autowired()(private val clusterSharding: ClusterSharding) 
   def getTask(@PathVariable("id") id: String): TaskStatus = {
     val future = (clusterSharding.shardRegion(TaskActor.typeName) ? GetTask(id)).mapTo[TaskStatus]
     Await.result(future, timeout.duration)
+  }
+
+  @RequestMapping(value = Array("/restart/{id}"), method = Array(GET))
+  def restartTask(@PathVariable("id") id: String): String = {
+    val future = (clusterSharding.shardRegion(TaskActor.typeName) ? RestartTask(id)).mapTo[String]
+    Await.result(future, timeout.duration)
+  }
+
+  @RequestMapping(value = Array("/cancel/{id}"), method = Array(GET))
+  def cancelTask(@PathVariable("id") id: String, request: HttpServletRequest) = {
+    clusterSharding.shardRegion(TaskActor.typeName) ! CancelTask(id, request.getRemoteAddr)
   }
 
   @RequestMapping(value = Array("/list"), method = Array(GET))

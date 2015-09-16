@@ -60,7 +60,6 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
   }
 
   var serverGroupState: ServerGroupLatestState = _
-  var isComplete = false
 
   override def preRestart(reason: Throwable, message: Option[Any]) = {
     reason.printStackTrace()
@@ -81,11 +80,9 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case event: TaskComplete =>
-      if (!isComplete) {
-        persist(event) { it =>
-          updateState(it)
-          sendTaskEvent(it)
-        }
+      persist(event) { it =>
+        updateState(it)
+        sendTaskEvent(it)
       }
 
     case event: ChildTaskGroupComplete =>
@@ -177,9 +174,6 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
         taskId = newTaskId
         task = deepCopyTask
         cloneServerGroupTaskReference = None
-        isComplete = false
-      case event: TaskComplete if event.description.isInstanceOf[ServerGroupDeepCopyTask] =>
-        isComplete = true
       case event: CloudDriverTaskReference =>
         cloneServerGroupTaskReference = Option(event)
       case _ => Nil

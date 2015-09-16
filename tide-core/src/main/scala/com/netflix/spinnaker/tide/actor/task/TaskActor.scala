@@ -8,7 +8,7 @@ import akka.pattern.ask
 import akka.persistence.{PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.TaskActorObject
-import com.netflix.spinnaker.tide.actor.task.TaskActor.{Log, Mutation, GetTask, TaskStatus, ExecuteChildTasks, ExecuteTask, ContinueTask, TaskComplete, ChildTaskComplete, ChildTaskGroupComplete}
+import com.netflix.spinnaker.tide.actor.task.TaskActor.{CancelTask, RestartTask, TaskCancel, Log, Mutation, GetTask, TaskStatus, ExecuteChildTasks, ExecuteTask, ContinueTask, TaskComplete, ChildTaskComplete, ChildTaskGroupComplete}
 import com.netflix.spinnaker.tide.actor.task.TaskDirector.TaskDescription
 
 import scala.concurrent.Await
@@ -50,7 +50,7 @@ class TaskActor extends PersistentActor with ActorLogging {
         updateState(it)
         parentTaskId match {
           case None => Nil
-          case Some(id) => getShardCluster(TaskActor.typeName) ? event.copy(taskId = id, childTaskId = Option(taskId))
+          case Some(id) => getShardCluster(TaskActor.typeName) ! event.copy(taskId = id, childTaskId = Option(taskId))
         }
       }
 
@@ -59,7 +59,7 @@ class TaskActor extends PersistentActor with ActorLogging {
         updateState(it)
         parentTaskId match {
           case None => Nil
-          case Some(id) => getShardCluster(TaskActor.typeName) ? event.copy(taskId = id, childTaskId = Option(taskId))
+          case Some(id) => getShardCluster(TaskActor.typeName) ! event.copy(taskId = id, childTaskId = Option(taskId))
         }
       }
 
@@ -84,6 +84,14 @@ class TaskActor extends PersistentActor with ActorLogging {
           }
         }
       }
+
+    case event: CancelTask =>
+      self ! TaskCancel(taskId, taskDescription, event.canceledBy)
+      childTasks.keySet.foreach(CancelTask(_, taskId))
+
+    case event: RestartTask =>
+      val future = (getShardCluster(TaskDirector.typeName) ? taskDescription).mapTo[ExecuteTask]
+      sender ! Await.result(future, timeout.duration).taskId
 
     case event: GetTask =>
       val sortedHistory = history.sortBy(_.timeStamp)
@@ -153,6 +161,8 @@ object TaskActor extends TaskActorObject {
   trait MutationDetails
 
   case class GetTask(taskId: String) extends TaskProtocol
+  case class CancelTask(taskId: String, canceledBy: String) extends TaskProtocol
+  case class RestartTask(taskId: String) extends TaskProtocol
   case class TaskStatus(taskId: String, parentTaskId: Option[String], taskDescription: TaskDescription,
                         childTasks: Set[String], history: List[Log], mutations: Set[Mutation],
                         taskComplete: Option[TaskComplete]) extends TaskProtocol
@@ -177,6 +187,9 @@ object TaskActor extends TaskActorObject {
   }
   case class TaskSuccess(taskId: String, description: TaskDescription, result: TaskResult) extends TaskComplete {
     val status = "success"
+  }
+  case class TaskCancel(taskId: String, description: TaskDescription, canceledBy: String) extends TaskComplete {
+    val status = "cancel"
   }
 
   trait TaskResult

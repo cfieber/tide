@@ -65,7 +65,6 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
   }
 
   var pipelineState: PipelineState = _
-  var isComplete = false
 
   override def preRestart(reason: Throwable, message: Option[Any]) = {
     reason.printStackTrace()
@@ -86,11 +85,9 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
       }
 
     case event: TaskComplete =>
-      if (!isComplete) {
-        persist(event) { it =>
-          updateState(it)
-          sendTaskEvent(it)
-        }
+      persist(event) { it =>
+        updateState(it)
+        sendTaskEvent(it)
       }
 
     case event: ChildTaskGroupComplete =>
@@ -162,9 +159,6 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
       case ExecuteTask(newTaskId, deepCopyTask: PipelineDeepCopyTask, _) =>
         taskId = newTaskId
         task = deepCopyTask
-        isComplete = false
-      case event: TaskComplete if event.description.isInstanceOf[PipelineDeepCopyTask] =>
-        isComplete = true
       case _ => Nil
     }
   }

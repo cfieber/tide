@@ -26,7 +26,6 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   private implicit val dispatcher = context.dispatcher
   def scheduler = context.system.scheduler
   private var checkForCreatedResources: Cancellable = _
-//  override def postStop(): Unit = checkForCreatedResources.cancel()
 
   var task: DependencyCopyTask = _
   var vpcIds: VpcIds = _
@@ -40,8 +39,6 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     val taskCluster = ClusterSharding.get(context.system).shardRegion(TaskActor.typeName)
     taskCluster ! taskEvent
   }
-
-  var isComplete = false
 
   override def preRestart(reason: Throwable, message: Option[Any]) = {
     reason.printStackTrace()
@@ -80,18 +77,16 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         }
 
     case event: TaskComplete =>
-      if (!isComplete) {
-        persist(event) { it =>
-          updateState(it)
-          checkForCreatedResources.cancel()
-          sendTaskEvent(it)
-          if (!task.dryRun) {
-            val logMessage = event match {
-              case taskSuccess: TaskSuccess => "All resources copied successfully."
-              case taskFailure: TaskFailure => s"Failure: ${taskFailure.message}"
-            }
-            sendTaskEvent(Log(taskId, logMessage))
+      persist(event) { it =>
+        updateState(it)
+        checkForCreatedResources.cancel()
+        sendTaskEvent(it)
+        if (!task.dryRun) {
+          val logMessage = event match {
+            case taskSuccess: TaskSuccess => "All resources copied successfully."
+            case taskFailure: TaskFailure => s"Failure: ${taskFailure.message}"
           }
+          sendTaskEvent(Log(taskId, logMessage))
         }
       }
 
@@ -229,12 +224,10 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       case ExecuteTask(newTaskId, copyTask: DependencyCopyTask, _) =>
         taskId = newTaskId
         task = copyTask
-        isComplete = false
       case event: VpcIds =>
         vpcIds = event
         resourceTracker = ResourceTracker(task.source, task.target, vpcIds)
       case event: TaskComplete =>
-        isComplete = true
       case RequiresSource(source, referencedBy) =>
         resourceTracker.requiredSource(source, referencedBy)
       case FoundTarget(target) =>
