@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide.model
 import com.fasterxml.jackson.annotation.{JsonProperty, JsonIgnore, JsonUnwrapped}
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
-import com.netflix.spinnaker.tide.actor.task.TaskActor.Create
+import com.netflix.spinnaker.tide.actor.task.TaskActor.{MutationDetails, Create}
 
 sealed trait AwsProtocol extends Serializable
 
@@ -72,8 +72,8 @@ object AwsApi {
     @JsonIgnore override def akkaIdentifier = s"${location.akkaIdentifier}.${identity.akkaIdentifier}"
   }
 
-  case class CreateAwsResource(taskId: String, awsReference: AwsReference[_ <: AwsIdentity],
-                               referencedBy: Option[AwsReference[_]], objectToCreate: Option[Any]= None) extends Create
+  case class CreateAwsResource(awsReference: AwsReference[_ <: AwsIdentity],
+                               referencedBy: Option[AwsReference[_]], objectToCreate: Option[Any]= None) extends MutationDetails
 
   case class SecurityGroup(groupId: String,
                            @JsonUnwrapped @JsonProperty("name") identity: SecurityGroupIdentity,

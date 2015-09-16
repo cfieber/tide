@@ -144,7 +144,7 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
       val migrator = ClusterVpcMigrator(task.sourceVpcName, task.targetVpcName, event.securityGroupIdMappingByLocation)
       val migratedPipeline = pipelineWithDisabledTriggers.applyVisitor(migrator)
       val newPipeline = migratedPipeline.copy(name = s"${migratedPipeline.name} - ${task.targetVpcName}")
-      sendTaskEvent(CreatePipeline(taskId, newPipeline))
+      sendTaskEvent(Mutation(taskId, Create(), CreatePipeline(newPipeline)))
       if (!task.dryRun) {
         sendTaskEvent(Log(taskId, s"Cloning pipeline '${pipelineState.name}'"))
         clusterSharding.shardRegion(Front50Actor.typeName) ! AddPipelines(List(newPipeline))
@@ -181,7 +181,7 @@ sealed trait PipelineDeepCopyProtocol extends Serializable
 object PipelineDeepCopyActor extends ClusteredActorObject with TaskActorObject {
   val props = Props[PipelineDeepCopyActor]
 
-  case class CreatePipeline(taskId: String, pipelineToCreate: PipelineState) extends Create with PipelineDeepCopyProtocol
+  case class CreatePipeline(pipelineToCreate: PipelineState) extends MutationDetails with PipelineDeepCopyProtocol
   case class PipelineDeepCopyTaskResult(pipelineId: String) extends TaskResult with PipelineDeepCopyProtocol
   case class PipelineDeepCopyTask(sourceId: String,
                                   sourceVpcName: Option[String],
