@@ -127,7 +127,8 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
         val cloneServerGroup = CloneServerGroup(newAutoScalingGroup, newLaunchConfiguration, startDisabled = true)
         if (task.dryRun) {
           val nextAsgIdentity = task.source.identity.nextGroup
-          sendTaskEvent(CreateAwsResource(taskId, AwsReference(task.target.location, nextAsgIdentity), None, Option(cloneServerGroup)))
+          sendTaskEvent(Mutation(taskId, Create(),
+            CreateAwsResource(AwsReference(task.target.location, nextAsgIdentity), None, Option(cloneServerGroup))))
           self ! TaskSuccess(taskId, task, ServerGroupDeepCopyTaskResult(Seq(nextAsgIdentity.autoScalingGroupName)))
         } else {
           sendTaskEvent(Log(taskId, s"Cloning server group ${task.source.akkaIdentifier}"))
@@ -159,7 +160,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
               self ! TaskSuccess(taskId, task, ServerGroupDeepCopyTaskResult(taskDetail.getCreatedServerGroups))
               taskDetail.getCreatedServerGroups.foreach { groupName =>
                 val reference = AwsReference(task.target.location, AutoScalingGroupIdentity(groupName))
-                sendTaskEvent(CreateAwsResource(taskId, reference, None))
+                sendTaskEvent(Mutation(taskId, Create(), CreateAwsResource(reference, None)))
               }
             }
           } else {

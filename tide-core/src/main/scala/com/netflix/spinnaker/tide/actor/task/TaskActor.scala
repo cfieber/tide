@@ -7,11 +7,9 @@ import akka.contrib.pattern.ClusterSharding
 import akka.pattern.ask
 import akka.persistence.{PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
-import com.netflix.spinnaker.tide.actor.{ClusteredActorObject, TaskActorObject}
-import com.netflix.spinnaker.tide.actor.task.TaskActor.{Log, Warn, Mutation, Create, GetTask, TaskStatus, ExecuteChildTasks, ExecuteTask, ContinueTask, TaskComplete, ChildTaskComplete, ChildTaskGroupComplete}
+import com.netflix.spinnaker.tide.actor.TaskActorObject
+import com.netflix.spinnaker.tide.actor.task.TaskActor.{Log, Mutation, GetTask, TaskStatus, ExecuteChildTasks, ExecuteTask, ContinueTask, TaskComplete, ChildTaskComplete, ChildTaskGroupComplete}
 import com.netflix.spinnaker.tide.actor.task.TaskDirector.TaskDescription
-import com.netflix.spinnaker.tide.model.AwsApi
-import AwsApi.{AwsIdentity, AwsReference}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.DurationInt
@@ -26,7 +24,6 @@ class TaskActor extends PersistentActor with ActorLogging {
   var parentTaskId: Option[String] = _
   var taskDescription: TaskDescription = _
   var history: List[Log] = Nil
-  var warnings: Set[Warn] = Set()
   var mutations: Set[Mutation] = Set()
   var taskComplete: Option[TaskComplete] = _
 
@@ -49,13 +46,22 @@ class TaskActor extends PersistentActor with ActorLogging {
       persist(event)(updateState(_))
 
     case event: Log =>
-      persist(event.copy(timeStamp = new Date().getTime))(updateState(_))
-
-    case event: Warn =>
-      persist(event)(updateState(_))
+      persist(event) { it =>
+        updateState(it)
+        parentTaskId match {
+          case None => Nil
+          case Some(id) => getShardCluster(TaskActor.typeName) ? event.copy(taskId = id, childTaskId = Option(taskId))
+        }
+      }
 
     case event: Mutation =>
-      persist(event)(updateState(_))
+      persist(event) { it =>
+        updateState(it)
+        parentTaskId match {
+          case None => Nil
+          case Some(id) => getShardCluster(TaskActor.typeName) ? event.copy(taskId = id, childTaskId = Option(taskId))
+        }
+      }
 
     case event: TaskComplete =>
       persist(event){ taskComplete =>
@@ -80,19 +86,9 @@ class TaskActor extends PersistentActor with ActorLogging {
       }
 
     case event: GetTask =>
-      var allHistory: List[Log] = history
-      var allWarnings: Set[Warn] = warnings
-      var allMutations: Set[Mutation] = mutations
-      childTasks.keySet.foreach { childTaskId =>
-        val future = (getShardCluster(TaskActor.typeName) ? GetTask(childTaskId)).mapTo[TaskStatus]
-        val childTaskStatus: TaskStatus = Await.result(future, timeout.duration)
-        allHistory :::= childTaskStatus.history
-        allWarnings ++= childTaskStatus.warnings
-        allMutations ++= childTaskStatus.mutations
-      }
-      val sortedHistory = allHistory.sortBy(_.timeStamp)
-      sender() ! TaskStatus(taskId, parentTaskId, taskDescription, childTasks.keySet, sortedHistory, allWarnings,
-        allMutations, taskComplete)
+      val sortedHistory = history.sortBy(_.timeStamp)
+      sender() ! TaskStatus(taskId, parentTaskId, taskDescription, childTasks.keySet, sortedHistory,
+        mutations, taskComplete)
 
   }
 
@@ -118,9 +114,6 @@ class TaskActor extends PersistentActor with ActorLogging {
       case event: Log =>
         history ::= event
 
-      case event: Warn =>
-        warnings += event
-
       case event: Mutation =>
         mutations += event
 
@@ -143,17 +136,25 @@ sealed trait TaskProtocol extends Serializable {
 object TaskActor extends TaskActorObject {
   val props = Props[TaskActor]
 
-  case class Log(taskId: String, message: String, timeStamp: Long = 0) extends TaskProtocol
-  case class Warn(taskId: String, AwsReference: AwsReference[_ <: AwsIdentity], message: String) extends TaskProtocol
-
-  sealed trait Mutation extends TaskProtocol
-  trait Create extends Mutation {
-    val operation = "create"
+  case class Log(taskId: String, message: String, childTaskId: Option[String] = None) extends TaskProtocol {
+    val timeStamp: Long = new Date().getTime
   }
+
+  case class Mutation(taskId: String, mutationType: MutationType, mutationDetails: MutationDetails,
+                      childTaskId: Option[String] = None) extends TaskProtocol
+
+  sealed trait MutationType {
+    def name: String
+  }
+  case class Create() extends MutationType {
+    val name: String = "create"
+  }
+
+  trait MutationDetails
 
   case class GetTask(taskId: String) extends TaskProtocol
   case class TaskStatus(taskId: String, parentTaskId: Option[String], taskDescription: TaskDescription,
-                        childTasks: Set[String], history: List[Log], warnings: Set[Warn], mutations: Set[Mutation],
+                        childTasks: Set[String], history: List[Log], mutations: Set[Mutation],
                         taskComplete: Option[TaskComplete]) extends TaskProtocol
 
   case class ExecuteChildTasks(parentTaskId: String, executeTasks: List[ExecuteTask]) extends TaskProtocol {
