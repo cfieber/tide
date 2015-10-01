@@ -16,26 +16,8 @@
 
 package com.netflix.spinnaker.tide.actor.polling
 
-import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPoll
 import com.netflix.spinnaker.tide.actor.polling.PollingActor.Poll
-import com.netflix.spinnaker.tide.actor.service.{EddaContractActorImpl, EddaContract}
 import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
-
-trait EddaPollingActor extends PollingActor {
-
-  def edda: EddaContract = new EddaContractActorImpl(ClusterSharding.get(context.system))
-
-  override def receive: Receive = {
-    case msg: EddaPoll =>
-      pollScheduler.scheduleNextPoll(msg)
-      handlePoll(msg.location)
-    case _ => Nil
-  }
-
-  def handlePoll(location: AwsLocation)
-
-}
 
 object EddaPollingActor {
   trait EddaPollingProtocol extends PollingProtocol {

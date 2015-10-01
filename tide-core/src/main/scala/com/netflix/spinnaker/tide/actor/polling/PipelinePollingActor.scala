@@ -36,7 +36,6 @@ class PipelinePollingActor() extends PollingActor {
     case msg: Poll =>
       pollScheduler.scheduleNextPoll(msg)
       handlePoll()
-    case _ => Nil
   }
 
   def handlePoll(): Unit = {

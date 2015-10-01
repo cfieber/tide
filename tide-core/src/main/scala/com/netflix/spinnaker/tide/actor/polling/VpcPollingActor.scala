@@ -19,30 +19,38 @@ package com.netflix.spinnaker.tide.actor.polling
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.ContractActorImpl
-import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPollingProtocol
+import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPoll, EddaPollingProtocol}
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.{LatestVpcs, GetVpcs}
-import com.netflix.spinnaker.tide.actor.service.EddaActor.RetrieveVpcs
+import com.netflix.spinnaker.tide.actor.service.EddaActor
+import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundVpcs, RetrieveSecurityGroups, RetrieveVpcs}
 import com.netflix.spinnaker.tide.model.AwsApi
 import AwsApi._
 
-
-class VpcPollingActor extends EddaPollingActor {
+class VpcPollingActor extends PollingActor {
 
   override def pollScheduler = new PollSchedulerActorImpl(context, VpcPollingActor)
 
-  var vpcs: Option[List[Vpc]] = None
+  val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
+
+  var location: AwsLocation = _
+  var vpcs: List[Vpc] = _
 
   override def receive: Receive = {
     case msg: GetVpcs =>
-      if (vpcs.isEmpty) {
-        handlePoll(msg.location)
+      if (Option(vpcs).isDefined) {
+        sender() ! LatestVpcs(msg.location, vpcs)
       }
-      sender() ! LatestVpcs(msg.location, vpcs.get)
-    case msg => super.receive(msg)
-  }
 
-  override def handlePoll(location: AwsLocation): Unit = {
-    vpcs = Some(edda.ask(RetrieveVpcs(location)).resources)
+    case msg: EddaPoll =>
+      location = msg.location
+      pollScheduler.scheduleNextPoll(msg)
+      clusterSharding.shardRegion(EddaActor.typeName) ! RetrieveVpcs(location)
+
+    case msg: FoundVpcs =>
+      vpcs = msg.resources
+      val latestVpcs = LatestVpcs(location, vpcs)
+      clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! latestVpcs
+      clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! latestVpcs
   }
 
 }

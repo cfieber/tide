@@ -2,29 +2,30 @@ package com.netflix.spinnaker.tide.actor.polling
 
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.tide.actor.ContractActorImpl
-import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPollingProtocol
-import com.netflix.spinnaker.tide.actor.polling.SubnetPollingActor.{LatestSubnets, GetSubnets}
-import com.netflix.spinnaker.tide.actor.service.EddaActor.RetrieveSubnets
+import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPoll, EddaPollingProtocol}
+import com.netflix.spinnaker.tide.actor.polling.SubnetPollingActor.LatestSubnets
+import com.netflix.spinnaker.tide.actor.service.EddaActor
+import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundSubnets, RetrieveSubnets}
 import com.netflix.spinnaker.tide.model.AwsApi.{AwsLocation, Subnet}
 
-class SubnetPollingActor extends EddaPollingActor {
+class SubnetPollingActor extends PollingActor {
 
   override def pollScheduler = new PollSchedulerActorImpl(context, SubnetPollingActor)
 
-  var subnets: Option[List[Subnet]] = None
+  val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
+
+  var location: AwsLocation = _
 
   override def receive: Receive = {
-    case msg: GetSubnets =>
-      if (subnets.isEmpty) {
-        handlePoll(msg.location)
-      }
-      sender() ! LatestSubnets(msg.location, subnets.get)
-    case msg => super.receive(msg)
-  }
+    case msg: EddaPoll =>
+      location = msg.location
+      pollScheduler.scheduleNextPoll(msg)
+      clusterSharding.shardRegion(EddaActor.typeName) ! RetrieveSubnets(location)
 
-  override def handlePoll(location: AwsLocation): Unit = {
-    subnets = Some(edda.ask(RetrieveSubnets(location)).resources)
+    case msg: FoundSubnets =>
+      val latestSubnets = LatestSubnets(location, msg.resources)
+      clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! latestSubnets
+      clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! latestSubnets
   }
 
 }
@@ -32,19 +33,5 @@ class SubnetPollingActor extends EddaPollingActor {
 object SubnetPollingActor extends PollingActorObject {
   val props = Props[SubnetPollingActor]
 
-  case class GetSubnets(location: AwsLocation) extends EddaPollingProtocol
   case class LatestSubnets(location: AwsLocation, resources: List[Subnet]) extends EddaPollingProtocol
-}
-
-trait SubnetPollingContract {
-  def ask(msg: GetSubnets): LatestSubnets
-}
-
-class SubnetPollingContractActor(val clusterSharding: ClusterSharding) extends SubnetPollingContract
-with ContractActorImpl[EddaPollingProtocol] {
-  val actorObject = SubnetPollingActor
-
-  def ask(msg: GetSubnets): LatestSubnets = {
-    askActor(msg, classOf[LatestSubnets])
-  }
 }
