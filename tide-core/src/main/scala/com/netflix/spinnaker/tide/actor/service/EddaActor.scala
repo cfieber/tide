@@ -88,36 +88,3 @@ object EddaActor extends ClusteredActorObject {
   case class FoundVpcs(resources: List[Vpc]) extends EddaProtocol
 
 }
-
-trait EddaContract {
-  def ask(retrieve: RetrieveSecurityGroups): FoundSecurityGroups
-  def ask(retrieve: RetrieveLoadBalancers): FoundLoadBalancers
-  def ask(retrieve: RetrieveLaunchConfigurations): FoundLaunchConfigurations
-  def ask(retrieve: RetrieveAutoScalingGroups): FoundAutoScalingGroups
-  def ask(retrieve: RetrieveSubnets): FoundSubnets
-  def ask(retrieve: RetrieveVpcs): FoundVpcs
-}
-
-class EddaContractActorImpl(val clusterSharding: ClusterSharding) extends EddaContract with ContractActorImpl[EddaProtocol] {
-  override val actorObject = EddaActor
-
-  def ask(retrieve: RetrieveSecurityGroups): FoundSecurityGroups = {
-    askActor(retrieve, classOf[FoundSecurityGroups])
-  }
-  def ask(retrieve: RetrieveLoadBalancers): FoundLoadBalancers = {
-    askActor(retrieve, classOf[FoundLoadBalancers])
-  }
-  def ask(retrieve: RetrieveLaunchConfigurations): FoundLaunchConfigurations = {
-    askActor(retrieve, classOf[FoundLaunchConfigurations])
-  }
-  def ask(retrieve: RetrieveAutoScalingGroups): FoundAutoScalingGroups = {
-    askActor(retrieve, classOf[FoundAutoScalingGroups])
-  }
-  def ask(retrieve: RetrieveSubnets): FoundSubnets = {
-    askActor(retrieve, classOf[FoundSubnets])
-  }
-  def ask(retrieve: RetrieveVpcs): FoundVpcs = {
-    askActor(retrieve, classOf[FoundVpcs])
-  }
-
-}

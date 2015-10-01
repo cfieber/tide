@@ -74,6 +74,7 @@ class AkkaClusterConfiguration {
     SecurityGroupPollingActor.startCluster(clusterSharding)
     LoadBalancerPollingActor.startCluster(clusterSharding)
     ServerGroupPollingActor.startCluster(clusterSharding)
+    LaunchConfigPollingActor.startCluster(clusterSharding)
     PipelinePollingActor.startCluster(clusterSharding)
 
     ServerGroupDeepCopyActor.startCluster(clusterSharding)
@@ -94,7 +95,7 @@ class AkkaClusterConfiguration {
     clusterSharding.shardRegion(PipelinePollingActor.typeName) ! PipelinePoll()
 
     val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, SubnetPollingActor,
-      SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
+      SecurityGroupPollingActor, LoadBalancerPollingActor, LaunchConfigPollingActor, ServerGroupPollingActor)
     val resourceTypes: List[Class[_]] =List(classOf[Vpc], classOf[Subnet], classOf[SecurityGroup],
       classOf[LoadBalancer], classOf[AutoScalingGroup], classOf[LaunchConfiguration])
     val accounts = eddaSettings.getAccountToRegionsMapping.keySet()

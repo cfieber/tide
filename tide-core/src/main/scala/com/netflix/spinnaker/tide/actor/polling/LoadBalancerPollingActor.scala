@@ -18,36 +18,54 @@ package com.netflix.spinnaker.tide.actor.polling
 
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.GetSecurityGroupIdToNameMappings
-import com.netflix.spinnaker.tide.actor.polling.SubnetPollingActor.GetSubnets
-import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.GetVpcs
-import com.netflix.spinnaker.tide.actor.service.EddaActor.RetrieveLoadBalancers
+import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPoll
+import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.LatestSecurityGroupIdToNameMappings
+import com.netflix.spinnaker.tide.actor.polling.SubnetPollingActor.LatestSubnets
+import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.LatestVpcs
+import com.netflix.spinnaker.tide.actor.service.EddaActor
+import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundLoadBalancers, RetrieveLoadBalancers}
 import com.netflix.spinnaker.tide.model.{AwsResourceProtocol, LoadBalancerLatestState, AwsApi}
 import AwsApi._
 import com.netflix.spinnaker.tide.actor.aws._
 
-class LoadBalancerPollingActor() extends EddaPollingActor {
+class LoadBalancerPollingActor() extends PollingActor {
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
   override def pollScheduler = new PollSchedulerActorImpl(context, LoadBalancerPollingActor)
 
-  val vpcPolling: VpcPollingContract = new VpcPollingContractActor(clusterSharding)
-  val subnetPolling: SubnetPollingContract = new SubnetPollingContractActor(clusterSharding)
-  val securityGroupPolling: SecurityGroupPollingContract = new SecurityGroupPollingContractActor(clusterSharding)
+  var location: AwsLocation = _
+  var latestSecurityGroups: LatestSecurityGroupIdToNameMappings = _
+  var latestVpcs: LatestVpcs = _
+  var latestSubnets: LatestSubnets = _
 
-  override def handlePoll(location: AwsLocation): Unit = {
-    val loadBalancers = edda.ask(RetrieveLoadBalancers(location)).resources
+  override def receive: Receive = {
+    case msg: LatestSecurityGroupIdToNameMappings =>
+      latestSecurityGroups = msg
 
-    val latestVpcs = vpcPolling.ask(GetVpcs(location))
-    val latestSubnets = subnetPolling.ask(GetSubnets(location))
-    val latestSecurityGroups = securityGroupPolling.ask(GetSecurityGroupIdToNameMappings(location))
-    loadBalancers.foreach { loadBalancer =>
-      var normalizedState = loadBalancer.state.convertToSecurityGroupNames(latestSecurityGroups.map).
-        populateVpcAttributes(latestVpcs.resources, latestSubnets.resources)
-      val reference = AwsReference(location, loadBalancer.identity)
-      val latestState = LoadBalancerLatestState(normalizedState)
-      clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, latestState)
-    }
+    case msg: LatestVpcs =>
+      latestVpcs = msg
+
+    case msg: LatestSubnets =>
+      latestSubnets = msg
+
+    case msg: EddaPoll =>
+      location = msg.location
+      pollScheduler.scheduleNextPoll(msg)
+      clusterSharding.shardRegion(EddaActor.typeName) ! RetrieveLoadBalancers(location)
+
+    case msg: FoundLoadBalancers =>
+      if (Option(latestSecurityGroups).isDefined
+        && Option(latestVpcs).isDefined
+        && Option(latestSubnets).isDefined) {
+        val loadBalancers = msg.resources
+        loadBalancers.foreach { loadBalancer =>
+          var normalizedState = loadBalancer.state.convertToSecurityGroupNames(latestSecurityGroups.map).
+            populateVpcAttributes(latestVpcs.resources, latestSubnets.resources)
+          val reference = AwsReference(location, loadBalancer.identity)
+          val latestState = LoadBalancerLatestState(normalizedState)
+          clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, latestState)
+        }
+      }
   }
 }
 

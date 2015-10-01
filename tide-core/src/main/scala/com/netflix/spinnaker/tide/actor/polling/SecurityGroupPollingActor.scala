@@ -19,42 +19,51 @@ package com.netflix.spinnaker.tide.actor.polling
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.ContractActorImpl
-import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPollingProtocol
+import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPoll, EddaPollingProtocol}
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.{LatestSecurityGroupIdToNameMappings, GetSecurityGroupIdToNameMappings}
-import com.netflix.spinnaker.tide.actor.service.EddaActor.RetrieveSecurityGroups
+import com.netflix.spinnaker.tide.actor.service.EddaActor
+import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundSecurityGroups, FoundLoadBalancers, RetrieveSecurityGroups}
 import com.netflix.spinnaker.tide.model.{AwsResourceProtocol, SecurityGroupLatestState, AwsApi}
 import AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor
 
-class SecurityGroupPollingActor extends EddaPollingActor {
+class SecurityGroupPollingActor extends PollingActor {
 
   override def pollScheduler = new PollSchedulerActorImpl(context, SecurityGroupPollingActor)
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
 
-  var securityGroupIdToName: Option[Map[String, SecurityGroupIdentity]] = None
+  var location: AwsLocation = _
+  var securityGroupIdToName: Map[String, SecurityGroupIdentity] = _
 
   override def receive: Receive = {
     case msg: GetSecurityGroupIdToNameMappings =>
-      if (securityGroupIdToName.isEmpty) {
-        handlePoll(msg.location)
+      if (Option(securityGroupIdToName).isDefined) {
+        sender() ! LatestSecurityGroupIdToNameMappings(msg.location, securityGroupIdToName)
       }
-      sender() ! LatestSecurityGroupIdToNameMappings(msg.location, securityGroupIdToName.get)
-    case msg => super.receive(msg)
+
+    case msg: EddaPoll =>
+      location = msg.location
+      pollScheduler.scheduleNextPoll(msg)
+      clusterSharding.shardRegion(EddaActor.typeName) ! RetrieveSecurityGroups(location)
+
+    case msg: FoundSecurityGroups =>
+      val securityGroups = msg.resources
+      securityGroupIdToName = securityGroups.map { securityGroup =>
+        securityGroup.groupId -> securityGroup.identity
+      }.toMap
+      val securityGroupIdToNameMsg = LatestSecurityGroupIdToNameMappings(location, securityGroupIdToName)
+      clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! securityGroupIdToNameMsg
+      clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! securityGroupIdToNameMsg
+      securityGroups.foreach { securityGroup =>
+        val normalizedState = securityGroup.state.ensureSecurityGroupNameOnIngressRules(securityGroupIdToName)
+        val latestState = SecurityGroupLatestState(securityGroup.groupId, normalizedState)
+        val reference = AwsReference(location, securityGroup.identity)
+        clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(reference, latestState)
+      }
+
   }
 
-  override def handlePoll(location: AwsLocation): Unit = {
-    val securityGroups = edda.ask(RetrieveSecurityGroups(location)).resources
-    securityGroupIdToName = Some(securityGroups.map { securityGroup =>
-      securityGroup.groupId -> securityGroup.identity
-    }.toMap)
-    securityGroups.foreach { securityGroup =>
-      val normalizedState = securityGroup.state.ensureSecurityGroupNameOnIngressRules(securityGroupIdToName.get)
-      val latestState = SecurityGroupLatestState(securityGroup.groupId, normalizedState)
-      val reference = AwsReference(location, securityGroup.identity)
-      clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(reference, latestState)
-    }
-  }
 }
 
 object SecurityGroupPollingActor extends PollingActorObject {
