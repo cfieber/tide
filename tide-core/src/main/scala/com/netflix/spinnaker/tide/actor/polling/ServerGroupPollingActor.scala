@@ -26,7 +26,7 @@ import com.netflix.spinnaker.tide.actor.polling.SubnetPollingActor.LatestSubnets
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.LatestVpcs
 import com.netflix.spinnaker.tide.actor.service.EddaActor
 import com.netflix.spinnaker.tide.actor.service.EddaActor._
-import com.netflix.spinnaker.tide.model.{AwsResourceProtocol, ServerGroupLatestState, AwsApi}
+import com.netflix.spinnaker.tide.model.{ClearLatestState, AwsResourceProtocol, ServerGroupLatestState, AwsApi}
 import AwsApi._
 
 class ServerGroupPollingActor() extends PollingActor {
@@ -39,6 +39,8 @@ class ServerGroupPollingActor() extends PollingActor {
   var latestVpcs: LatestVpcs = _
   var latestSubnets: LatestSubnets = _
   var latestLaunchConfigs: LatestLaunchConfigs = _
+
+  var currentIds: Seq[AutoScalingGroupIdentity] = Nil
 
   override def receive: Receive = {
     case msg: LatestSecurityGroupIdToNameMappings =>
@@ -64,6 +66,15 @@ class ServerGroupPollingActor() extends PollingActor {
         && Option(latestSubnets).isDefined
         && Option(latestLaunchConfigs).isDefined) {
         val autoScalingGroups = msg.resources
+
+        val oldIds = currentIds
+        currentIds = autoScalingGroups.map(_.identity)
+        val removedIds = oldIds.toSet -- currentIds.toSet
+        removedIds.foreach { identity =>
+          val reference = AwsReference(location, identity)
+          clusterSharding.shardRegion(ServerGroupActor.typeName) ! AwsResourceProtocol(reference, ClearLatestState())
+        }
+
         var launchConfigNameToAutoScalingGroup: Map[String, AutoScalingGroup] = Map()
         autoScalingGroups.foreach { autoScalingGroup =>
           launchConfigNameToAutoScalingGroup += (autoScalingGroup.state.launchConfigurationName -> autoScalingGroup)

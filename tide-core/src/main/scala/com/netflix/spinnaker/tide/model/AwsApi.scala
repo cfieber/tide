@@ -189,7 +189,7 @@ object AwsApi {
       copy(securityGroups = newGroupNames)
     }
 
-    def populateVpcAttributes(vpcs: List[Vpc], subnetDetails: List[Subnet]): LoadBalancerState = {
+    def populateVpcAttributes(vpcs: Seq[Vpc], subnetDetails: Seq[Subnet]): LoadBalancerState = {
       val loadBalancerState: Option[LoadBalancerState] = subnets.headOption.flatMap { subnetId =>
         val subnetOption = subnetDetails.find(_.subnetId == subnetId)
         subnetOption.map { subnet =>
@@ -263,7 +263,7 @@ object AwsApi {
       copy(minSize = 0, maxSize = 0, desiredCapacity = 0)
     }
 
-    def populateVpcAttributes(vpcs: List[Vpc], subnets: List[Subnet]): AutoScalingGroupState = {
+    def populateVpcAttributes(vpcs: Seq[Vpc], subnets: Seq[Subnet]): AutoScalingGroupState = {
       val splitVpcZoneIdentifier = VPCZoneIdentifier.split(",")
       val asgState: Option[AutoScalingGroupState] = splitVpcZoneIdentifier.headOption.flatMap { subnetId =>
         val subnetOption = subnets.find(_.subnetId == subnetId)
@@ -285,7 +285,7 @@ object AwsApi {
 
   case class Subnet(subnetId: String, vpcId: String,
                     availabilityZone: String, availableIpAddressCount: Int, cidrBlock: String, defaultForAz: Boolean,
-                    mapPublicIpOnLaunch: Boolean, state: String, tags: List[Tag]) extends AwsProtocol {
+                    mapPublicIpOnLaunch: Boolean, state: String, tags: Seq[Tag]) extends AwsProtocol {
     private val objectMapper = new ObjectMapper()
     private val immutableMetadataKey = "immutable_metadata"
     private val nameKey = "Name"
@@ -310,7 +310,7 @@ object AwsApi {
 
   case class Vpc(vpcId: String,
                  cidrBlock: String, dhcpOptionsId: String, instanceTenancy: String, isDefault: Boolean, state: String,
-                 tags: List[Tag]) extends AwsProtocol {
+                 tags: Seq[Tag]) extends AwsProtocol {
     def name: Option[String] = {
       val nameTagOption: Option[Tag] = tags.find(_.key == "Name")
       nameTagOption.map(_.value)

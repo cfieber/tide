@@ -32,13 +32,13 @@ class VpcTransformations {
 
 trait VpcTransformation {
   def translateIpPermissions(reference: AwsReference[SecurityGroupIdentity], securityGroupState: SecurityGroupState): Set[IpPermission]
-  def log: List[String]
+  def log: Seq[String]
 }
 
 class NoOpVpcTransformation extends VpcTransformation {
   def translateIpPermissions(reference: AwsReference[SecurityGroupIdentity], securityGroupState: SecurityGroupState): Set[IpPermission] = {
     securityGroupState.ipPermissions
   }
-  override def log: List[String] = Nil
+  override def log: Seq[String] = Nil
 }
 

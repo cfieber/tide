@@ -33,5 +33,5 @@ class SubnetPollingActor extends PollingActor {
 object SubnetPollingActor extends PollingActorObject {
   val props = Props[SubnetPollingActor]
 
-  case class LatestSubnets(location: AwsLocation, resources: List[Subnet]) extends EddaPollingProtocol
+  case class LatestSubnets(location: AwsLocation, resources: Seq[Subnet]) extends EddaPollingProtocol
 }

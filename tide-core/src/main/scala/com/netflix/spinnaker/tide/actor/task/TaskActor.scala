@@ -28,7 +28,7 @@ class TaskActor extends PersistentActor with ActorLogging {
   var taskComplete: Option[TaskComplete] = _
 
   var childTasks: Map[String, TaskDescription] = Map()
-  var childTaskGroups: List[List[String]] = Nil
+  var childTaskGroups: List[Seq[String]] = Nil
   var childTasksComplete: Map[String, TaskComplete] = Map()
 
   def getShardCluster(name: String): ActorRef = {
@@ -73,13 +73,13 @@ class TaskActor extends PersistentActor with ActorLogging {
     case event: ChildTaskComplete =>
       persist(event) { childTaskComplete =>
         updateState(childTaskComplete)
-        val childTaskGroupOption: Option[List[String]] = childTaskGroups.find(_.contains(event.taskComplete.taskId))
+        val childTaskGroupOption: Option[Seq[String]] = childTaskGroups.find(_.contains(event.taskComplete.taskId))
         childTaskGroupOption.foreach { childTaskGroup =>
           val completedChildTaskGroup: Map[String, Option[TaskComplete]] = childTaskGroup.map { childTaskId =>
             childTaskId -> childTasksComplete.get(childTaskId)
           }.toMap
           if (completedChildTaskGroup.values.forall(_.isDefined)) {
-            val childTaskCompletes: List[TaskComplete] = completedChildTaskGroup.values.flatten.toList
+            val childTaskCompletes: Seq[TaskComplete] = completedChildTaskGroup.values.flatten.toList
             getShardCluster(taskDescription.executionActorTypeName) ! ChildTaskGroupComplete(taskId, childTaskCompletes)
           }
         }
@@ -164,10 +164,10 @@ object TaskActor extends TaskActorObject {
   case class CancelTask(taskId: String, canceledBy: String) extends TaskProtocol
   case class RestartTask(taskId: String) extends TaskProtocol
   case class TaskStatus(taskId: String, parentTaskId: Option[String], taskDescription: TaskDescription,
-                        childTasks: Set[String], history: List[Log], mutations: Set[Mutation],
+                        childTasks: Set[String], history: Seq[Log], mutations: Set[Mutation],
                         taskComplete: Option[TaskComplete]) extends TaskProtocol
 
-  case class ExecuteChildTasks(parentTaskId: String, executeTasks: List[ExecuteTask]) extends TaskProtocol {
+  case class ExecuteChildTasks(parentTaskId: String, executeTasks: Seq[ExecuteTask]) extends TaskProtocol {
     def taskId = parentTaskId
   }
   case class ExecuteTask(taskId: String, description: TaskDescription, parentTaskId: Option[String] = None) extends TaskProtocol
@@ -200,7 +200,7 @@ object TaskActor extends TaskActorObject {
   }
 
   case class ChildTaskComplete(parentTaskId: String, taskComplete: TaskComplete) extends ChildTaskProtocol
-  case class ChildTaskGroupComplete(parentTaskId: String, taskCompletes: List[TaskComplete]) extends ChildTaskProtocol
+  case class ChildTaskGroupComplete(parentTaskId: String, taskCompletes: Seq[TaskComplete]) extends ChildTaskProtocol
 
 }
 

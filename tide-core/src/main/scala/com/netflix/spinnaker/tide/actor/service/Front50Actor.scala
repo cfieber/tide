@@ -46,25 +46,7 @@ object Front50Actor extends SingletonActorObject {
   }
 
   case class GetPipelines() extends Front50Protocol
-  case class FoundPipelines(resources: List[Pipeline]) extends Front50Protocol
-  case class AddPipelines(pipelines: List[PipelineState]) extends Front50Protocol
-
-}
-
-trait Front50Contract {
-  def ask(msg: GetPipelines): FoundPipelines
-  def send(msg: AddPipelines)
-}
-
-class Front50ContractActorImpl(val clusterSharding: ClusterSharding) extends Front50Contract with ContractActorImpl[Front50Protocol] {
-  override val actorObject = Front50Actor
-
-  def ask(msg: GetPipelines): FoundPipelines = {
-    askActor(msg, classOf[FoundPipelines])
-  }
-
-  def send(msg: AddPipelines) = {
-    sendToActor(msg)
-  }
+  case class FoundPipelines(resources: Seq[Pipeline]) extends Front50Protocol
+  case class AddPipelines(pipelines: Seq[PipelineState]) extends Front50Protocol
 
 }

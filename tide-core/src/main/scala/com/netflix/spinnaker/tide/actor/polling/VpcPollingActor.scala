@@ -33,7 +33,7 @@ class VpcPollingActor extends PollingActor {
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
 
   var location: AwsLocation = _
-  var vpcs: List[Vpc] = _
+  var vpcs: Seq[Vpc] = _
 
   override def receive: Receive = {
     case msg: GetVpcs =>
@@ -59,18 +59,5 @@ object VpcPollingActor extends PollingActorObject {
   val props = Props[VpcPollingActor]
 
   case class GetVpcs(location: AwsLocation) extends EddaPollingProtocol
-  case class LatestVpcs(location: AwsLocation, resources: List[Vpc]) extends EddaPollingProtocol
-}
-
-trait VpcPollingContract {
-  def ask(msg: GetVpcs): LatestVpcs
-}
-
-class VpcPollingContractActor(val clusterSharding: ClusterSharding) extends VpcPollingContract
-  with ContractActorImpl[EddaPollingProtocol] {
-  val actorObject = VpcPollingActor
-
-  def ask(msg: GetVpcs): LatestVpcs = {
-    askActor(msg, classOf[LatestVpcs])
-  }
+  case class LatestVpcs(location: AwsLocation, resources: Seq[Vpc]) extends EddaPollingProtocol
 }
