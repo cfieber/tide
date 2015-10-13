@@ -69,8 +69,6 @@ allprojects {
     testCompile "org.scalatest:scalatest_$versions.scala:$versions.scalaTest"
     testCompile "com.typesafe.akka:akka-actor-tests_$versions.scala:$versions.akka"
     testCompile "org.scalamock:scalamock-scalatest-support_$versions.scala:3.2"
-
-    testRuntime "com.github.jdgoldie:akka-persistence-shared-inmemory_$versions.scala:1.0.16"
   }
 }
 
