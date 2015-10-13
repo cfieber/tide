@@ -29,29 +29,29 @@ trait CloudDriverService {
 
   @Headers(Array("Accept: application/json"))
   @POST("/ops")
-  def submitTask(@Body cloudDriverOperations: List[Map[String, CloudDriverOperation]]): TaskReference
+  def submitTask(@Body cloudDriverOperations: Seq[Map[String, CloudDriverOperation]]): TaskReference
 
   @Headers(Array("Accept: application/json"))
   @GET("/applications/{application}/clusters/{account}/{cluster}")
   def getClusterDetail(
                         @Path("application") application: String,
                         @Path("account") account: String,
-                        @Path("cluster") cluster: String): List[ClusterDetailResponse]
+                        @Path("cluster") cluster: String): Seq[ClusterDetailResponse]
 }
 
 object CloudDriverService {
 
   case class TaskReference(id: String,
                            error: String,
-                           errors: List[String],
+                           errors: Seq[String],
                            status: String)
 
   case class TaskDetail(id: String,
                         startTimeMs: Long,
                         status: Status,
-                        history: List[LogMessage],
-                        resultObjects: List[Map[String, Any]]) {
-    def getCreatedServerGroups: List[String] = {
+                        history: Seq[LogMessage],
+                        resultObjects: Seq[Map[String, Any]]) {
+    def getCreatedServerGroups: Seq[String] = {
       if (!status.completed) {
         return Nil
       }
@@ -61,7 +61,7 @@ object CloudDriverService {
       resultMapOption.foreach { resultMap =>
         val resultOption = resultMap.get(resultName)
         resultOption.foreach { result =>
-          val resultList = result.asInstanceOf[List[String]]
+          val resultList = result.asInstanceOf[Seq[String]]
           val resultParts = resultList.head.split(":")
           val serverGroupName: String = resultParts(1)
           newServerGroupNames ::= serverGroupName
@@ -81,29 +81,29 @@ object CloudDriverService {
 
 
   case class ClusterDetailResponse(name: String, @JsonProperty("type") cloudProviderType: String, accountName: String,
-                                   serverGroups: List[ServerGroup], loadBalancers: List[Map[String, Any]])
+                                   serverGroups: Seq[ServerGroup], loadBalancers: Seq[Map[String, Any]])
 
   case class ServerGroup(name: String, launchConfigName: String, vpcId: String,
-                         @JsonProperty("type") cloudProviderType: String, region: String, zones: List[String],
-                         health: List[Any], image: Map[String, Any], asg: Map[String, Any],
+                         @JsonProperty("type") cloudProviderType: String, region: String, zones: Seq[String],
+                         health: Seq[Any], image: Map[String, Any], asg: Map[String, Any],
                          buildInfo: Map[String, Any], launchConfig: Map[String, Any],
-                         instances: List[Instance])
+                         instances: Seq[Instance])
   case class Instance(subnetId: String, virtualizationType: String, amiLaunchIndex: Int, sourceDestCheck: Boolean,
                       isHealthy: Boolean, instanceId: String, vpcId: String, hypervisor: String, rootDeviceName: String,
                       architecture: String, ebsOptimized: Boolean, imageId: String, stateTransitionReason: String,
                       clientToken: String, instanceType: String, keyName: String, publicDnsName: String,
                       privateIpAddress: String, rootDeviceType: String, launchTime: Long, name: String,
                       privateDnsName: String, monitoring: Map[String, Any], iamInstanceProfile: Map[String, Any],
-                      state: Map[String, Any], tags: List[Map[String, Any]],
-                      networkInterfaces: List[Map[String, Any]], securityGroups: List[Map[String, Any]],
-                      health: List[Map[String, Any]], blockDeviceMappings: List[Map[String, Any]],
-                      productCodes: List[Any], placement: Map[String, Any])
+                      state: Map[String, Any], tags: Seq[Map[String, Any]],
+                      networkInterfaces: Seq[Map[String, Any]], securityGroups: Seq[Map[String, Any]],
+                      health: Seq[Map[String, Any]], blockDeviceMappings: Seq[Map[String, Any]],
+                      productCodes: Seq[Any], placement: Map[String, Any])
 
 
   sealed trait CloudDriverOperation {
     def operationTypeName: String
 
-    def content(): List[Map[String, CloudDriverOperation]] = {
+    def content(): Seq[Map[String, CloudDriverOperation]] = {
       List(Map(operationTypeName -> this))
     }
   }

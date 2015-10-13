@@ -7,8 +7,8 @@ import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.TaskActorObject
 import com.netflix.spinnaker.tide.actor.aws.{LoadBalancerActor, SecurityGroupActor}
 import com.netflix.spinnaker.tide.actor.copy.DependencyCopyActor.{FoundTarget, RequiresSource, NonexistentTarget, DependencyCopyTaskResult, DependencyCopyTask, VpcIds, CheckCompletion, SourceSecurityGroup, TargetSecurityGroup}
-import com.netflix.spinnaker.tide.actor.polling.{VpcPollingContractActor, VpcPollingContract}
-import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.GetVpcs
+import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor
+import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.{LatestVpcs, GetVpcs}
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
 import com.netflix.spinnaker.tide.actor.task.TaskDirector._
 import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskProtocol}
@@ -33,7 +33,6 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   var resourceTracker: ResourceTracker = _
 
   val clusterSharding = ClusterSharding.get(context.system)
-  def vpcPoller: VpcPollingContract = new VpcPollingContractActor(clusterSharding)
 
   def sendTaskEvent(taskEvent: TaskProtocol) = {
     val taskCluster = ClusterSharding.get(context.system).shardRegion(TaskActor.typeName)
@@ -54,18 +53,16 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     case event @ ExecuteTask(_, _: DependencyCopyTask, _) =>
       persist(event) { e =>
         updateState(e)
-        val latestVpcs = vpcPoller.ask(GetVpcs(task.target.location))
-        val sourceVpc = latestVpcs.resources.find(_.name == task.source.vpcName).map(_.vpcId)
-        val targetVpc = latestVpcs.resources.find(_.name == task.target.vpcName).map(_.vpcId)
-        if (targetVpc.isEmpty) {
-          sendTaskEvent(TaskFailure(taskId, task, s"No VPC named '${task.target.vpcName}'.", None))
-        } else {
-          self ! VpcIds(sourceVpc, targetVpc)
-        }
+        clusterSharding.shardRegion(VpcPollingActor.typeName) ! GetVpcs(task.target.location)
       }
 
-    case event: VpcIds =>
-        persist(event) { it =>
+    case latestVpcs: LatestVpcs =>
+      val sourceVpc = latestVpcs.resources.find(_.name == task.source.vpcName).map(_.vpcId)
+      val targetVpc = latestVpcs.resources.find(_.name == task.target.vpcName).map(_.vpcId)
+      if (targetVpc.isEmpty) {
+        sendTaskEvent(TaskFailure(taskId, task, s"No VPC named '${task.target.vpcName}'.", None))
+      } else {
+        persist(VpcIds(sourceVpc, targetVpc)) { it =>
           updateState(it)
           checkForCreatedResources = scheduler.schedule(25 seconds, 25 seconds, self, CheckCompletion())
           task.requiredSecurityGroupNames.foreach { it =>
@@ -75,6 +72,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
             self ! RequiresSource(resourceTracker.asSourceLoadBalancerReference(it), None)
           }
         }
+      }
 
     case event: TaskComplete =>
       persist(event) { it =>

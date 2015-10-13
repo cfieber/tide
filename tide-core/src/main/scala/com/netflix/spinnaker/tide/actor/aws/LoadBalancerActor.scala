@@ -35,67 +35,57 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
 
   override def persistenceId: String = self.path.name
 
-  def scheduler = context.system.scheduler
   private implicit val dispatcher = context.dispatcher
-  var latestStateTimeout = scheduler.scheduleOnce(20 seconds, self, LatestStateTimeout)
 
   val clusterSharding = ClusterSharding.get(context.system)
+  context.setReceiveTimeout(5 minutes)
 
   var awsReference: AwsReference[LoadBalancerIdentity] = _
   var desiredState: Option[UpsertLoadBalancer] = None
   var latestState: Option[LoadBalancerLatestState] = None
 
-  override def postStop(): Unit = latestStateTimeout.cancel()
-
   override def receiveCommand: Receive = {
-    case wrapper: AwsResourceProtocol[_] =>
-      handleAwsResourceProtocol(wrapper.awsReference.asInstanceOf[AwsReference[LoadBalancerIdentity]],
-        wrapper.event.asInstanceOf[LoadBalancerEvent])
+    case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
 
-    case LatestStateTimeout =>
+    case wrapper: AwsResourceProtocol[_] =>
+      handleAwsResourceProtocol(wrapper.awsReference.asInstanceOf[AwsReference[LoadBalancerIdentity]], wrapper.event)
+  }
+
+  private def handleAwsResourceProtocol(newAwsReference: AwsReference[LoadBalancerIdentity],
+                                        event: ResourceEvent) = event match {
+    case event: GetLoadBalancer =>
+      this.awsReference = newAwsReference
+      sender() ! new LoadBalancerDetails(newAwsReference, latestState, desiredState)
+
+    case event: ClearLatestState =>
       if (latestState.isDefined) {
-        persist(ClearLatestState()) { it =>
+        persist(event) { it =>
           updateState(it)
           val comparableEvent = DiffLoadBalancer(awsReference, None)
           clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
         }
-      } else {
-        context.parent ! Passivate(stopMessage = PoisonPill)
       }
-      if (desiredState.isDefined) {
-        self ! MutateState()
-      }
-
-    case event: MutateState =>
-      desiredState.foreach(mutate)
-  }
-
-  private def handleAwsResourceProtocol(newAwsReference: AwsReference[LoadBalancerIdentity],
-                                        event: LoadBalancerEvent) = event match {
-    case event: GetLoadBalancer =>
-      updateReferences(newAwsReference)
-      sender() ! new LoadBalancerDetails(newAwsReference, latestState, desiredState)
 
     case event: UpsertLoadBalancer =>
-      updateReferences(newAwsReference)
+      this.awsReference = newAwsReference
       if (desiredState != Option(event)) {
-        persist(event) { e => updateState(event) }
+        persist(event) { e =>
+          updateState(event)
+          desiredState.foreach(mutate)
+        }
       }
-      self ! MutateState()
 
     case event: LoadBalancerLatestState =>
-      updateReferences(newAwsReference)
-      latestStateTimeout.cancel()
-      latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
+      this.awsReference = newAwsReference
       if (latestState != Option(event)) {
         persist(event) { e =>
           updateState(event)
           val comparableEvent = DiffLoadBalancer(awsReference,
             Option(LoadBalancerComparableAttributes.from(event.state)))
           clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
+          desiredState.foreach(mutate)
         }
       }
-      self ! MutateState()
   }
 
   private def mutate(upsertLoadBalancer: UpsertLoadBalancer) = {
@@ -104,22 +94,14 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
       case None =>
         cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
       case Some(latest) =>
-        val latestOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, latest.state)
-        val upsertOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, upsertLoadBalancer.state)
-        if (latestOp == upsertOp) {
-          persist(ClearDesiredState())(it => updateState(it))
-        } else {
-          if (upsertLoadBalancer.overwrite) {
+        if (upsertLoadBalancer.overwrite) {
+          val latestOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, latest.state)
+          val upsertOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, upsertLoadBalancer.state)
+          if (latestOp != upsertOp) {
             cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
-          } else {
-            persist(ClearDesiredState())(it => updateState(it))
           }
         }
     }
-  }
-
-  private def updateReferences(newAwsReference: AwsReference[LoadBalancerIdentity]) = {
-    awsReference = newAwsReference
   }
 
   private def updateState(event: Any) = {
@@ -130,8 +112,6 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
         latestState = Option(event)
       case event: ClearLatestState =>
         latestState = None
-      case event: ClearDesiredState =>
-        desiredState = None
       case _ => Nil
     }
   }

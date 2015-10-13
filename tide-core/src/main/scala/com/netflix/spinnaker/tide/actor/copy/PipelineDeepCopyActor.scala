@@ -125,7 +125,7 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
             val vpcName: Option[String] = AwsApi.getVpcNameFromSubnetType(clusterDependencies.subnetType)
             vpcName == task.sourceVpcName
           }
-          val dependencyCopyTasks: List[DependencyCopyTask] = clusterDependenciesForSourceVpc.map { dependencies =>
+          val dependencyCopyTasks: Seq[DependencyCopyTask] = clusterDependenciesForSourceVpc.map { dependencies =>
             val sourceVpcLocation = VpcLocation(AwsLocation(dependencies.account, dependencies.region), task.sourceVpcName)
             val targetVpcLocation = VpcLocation(AwsLocation(dependencies.account, dependencies.region), Option(task.targetVpcName))
             val securityGroupIdToName = getSecurityGroupInToNameMapping(dependencies.account, dependencies.region)

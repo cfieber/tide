@@ -5,8 +5,8 @@ import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPollingProtocol, EddaPoll}
 import com.netflix.spinnaker.tide.actor.polling.LaunchConfigPollingActor.LatestLaunchConfigs
 import com.netflix.spinnaker.tide.actor.service.EddaActor
-import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundLaunchConfigurations, RetrieveLaunchConfigurations, FoundSubnets, RetrieveSubnets}
-import com.netflix.spinnaker.tide.model.AwsApi.{LaunchConfiguration, Subnet, AwsLocation}
+import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundLaunchConfigurations, RetrieveLaunchConfigurations}
+import com.netflix.spinnaker.tide.model.AwsApi.{LaunchConfiguration, AwsLocation}
 
 class LaunchConfigPollingActor extends PollingActor {
 
@@ -32,5 +32,5 @@ class LaunchConfigPollingActor extends PollingActor {
 object LaunchConfigPollingActor extends PollingActorObject {
   val props = Props[LaunchConfigPollingActor]
 
-  case class LatestLaunchConfigs(location: AwsLocation, resources: List[LaunchConfiguration]) extends EddaPollingProtocol
+  case class LatestLaunchConfigs(location: AwsLocation, resources: Seq[LaunchConfiguration]) extends EddaPollingProtocol
 }

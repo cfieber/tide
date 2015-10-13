@@ -23,37 +23,37 @@ import retrofit.http.{Body, POST, GET, Headers}
 trait Front50Service {
   @Headers(Array("Accept: application/json"))
   @GET("/pipelines")
-  def getAllPipelines: List[Pipeline]
+  def getAllPipelines: Seq[Pipeline]
 
   @Headers (Array ("Accept: application/json") )
-  @POST ("/pipelines/batchUpdate") def addPipelines (@Body pipelines: List[PipelineState]): String
+  @POST ("/pipelines/batchUpdate") def addPipelines (@Body pipelines: Seq[PipelineState]): String
 }
 
 object Front50Service {
 
   case class Pipeline(id: String, @JsonUnwrapped @JsonProperty("state") state: PipelineState)
 
-  case class PipelineState(name: String, application: String, parallel: Boolean, triggers: List[Map[String, Any]],
-                           stages: List[Map[String, Any]]) {
+  case class PipelineState(name: String, application: String, parallel: Boolean, triggers: Seq[Map[String, Any]],
+                           stages: Seq[Map[String, Any]]) {
 
     def disableTriggers(): PipelineState = {
-      val newTriggers: List[Map[String, Any]] = triggers.map { trigger =>
+      val newTriggers: Seq[Map[String, Any]] = triggers.map { trigger =>
         trigger + ("enabled" -> false)
       }
       this.copy(triggers = newTriggers)
     }
 
     def applyVisitor(clusterVisitor: ClusterVisitor): PipelineState = {
-      val newStages: List[Map[String, Any]] = stages.map { stage =>
+      val newStages: Seq[Map[String, Any]] = stages.map { stage =>
         stage("type") match {
           case "deploy" =>
-            val clusters = stage("clusters").asInstanceOf[List[Map[String, Any]]]
+            val clusters = stage("clusters").asInstanceOf[Seq[Map[String, Any]]]
             val newClusters = clusters.map { cluster =>
               clusterVisitor.visit(Cluster(cluster)).attributes
             }
             stage + ("clusters" -> newClusters)
           case "canary" =>
-            val clusterPairs = stage("clusterPairs").asInstanceOf[List[Map[String, Map[String, Any]]]]
+            val clusterPairs = stage("clusterPairs").asInstanceOf[Seq[Map[String, Map[String, Any]]]]
             val newClusterPairs = clusterPairs.map { clusterPair =>
               var newClusterPair = clusterPair
               val newBaseline = clusterVisitor.visit(Cluster(clusterPair("baseline"))).attributes
@@ -90,14 +90,14 @@ object Front50Service {
     }
 
     def getLoadBalancersNames = {
-      attributes.getOrElse("loadBalancers", Nil).asInstanceOf[List[String]].toSet
+      attributes.getOrElse("loadBalancers", Nil).asInstanceOf[Seq[String]].toSet
     }
     def setLoadBalancersNames(newLoadBalancers: Set[String]): Cluster = {
       Cluster(attributes + ("loadBalancers" -> newLoadBalancers))
     }
 
     def getSecurityGroupIds = {
-      attributes.getOrElse("securityGroups", Nil).asInstanceOf[List[String]].toSet
+      attributes.getOrElse("securityGroups", Nil).asInstanceOf[Seq[String]].toSet
     }
     def setSecurityGroupIds(newSecurityGroupIds: Set[String]): Cluster = {
       Cluster(attributes + ("securityGroups" -> newSecurityGroupIds))

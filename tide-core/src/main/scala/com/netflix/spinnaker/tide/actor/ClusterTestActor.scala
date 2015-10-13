@@ -64,7 +64,7 @@ object ClusterTestActor {
 
   case class GetMessages(name: String) extends MessageProtocol
   case class NewMessage(name: String, messageContent: MessageContent, index3: Int = 0) extends MessageProtocol
-  case class Messages(name: String, messages: List[String]) extends MessageProtocol
+  case class Messages(name: String, messages: Seq[String]) extends MessageProtocol
   case class MessageContent(content: String, index3: Int = 0)
 
   def startCluster(clusterSharding: ClusterSharding) = {

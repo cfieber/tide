@@ -23,7 +23,7 @@ class ClusterTestController @Autowired()(private val clusterSharding: ClusterSha
   }
 
   @RequestMapping(value = Array("/clusterTest/{id}"), method = Array(GET))
-  def all(@PathVariable("id") id: String): List[String] = {
+  def all(@PathVariable("id") id: String): Seq[String] = {
     val future = (clusterTestActor ? GetMessages(id)).mapTo[Messages]
     Await.result(future, timeout.duration).messages
   }

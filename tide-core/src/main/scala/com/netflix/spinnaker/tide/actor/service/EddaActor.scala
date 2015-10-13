@@ -80,11 +80,11 @@ object EddaActor extends ClusteredActorObject {
     override val resourceType = classOf[Vpc]
   }
 
-  case class FoundSecurityGroups(resources: List[SecurityGroup]) extends EddaProtocol
-  case class FoundLoadBalancers(resources: List[LoadBalancer]) extends EddaProtocol
-  case class FoundLaunchConfigurations(resources: List[LaunchConfiguration]) extends EddaProtocol
-  case class FoundAutoScalingGroups(resources: List[AutoScalingGroup]) extends EddaProtocol
-  case class FoundSubnets(resources: List[Subnet]) extends EddaProtocol
-  case class FoundVpcs(resources: List[Vpc]) extends EddaProtocol
+  case class FoundSecurityGroups(resources: Seq[SecurityGroup]) extends EddaProtocol
+  case class FoundLoadBalancers(resources: Seq[LoadBalancer]) extends EddaProtocol
+  case class FoundLaunchConfigurations(resources: Seq[LaunchConfiguration]) extends EddaProtocol
+  case class FoundAutoScalingGroups(resources: Seq[AutoScalingGroup]) extends EddaProtocol
+  case class FoundSubnets(resources: Seq[Subnet]) extends EddaProtocol
+  case class FoundVpcs(resources: Seq[Vpc]) extends EddaProtocol
 
 }

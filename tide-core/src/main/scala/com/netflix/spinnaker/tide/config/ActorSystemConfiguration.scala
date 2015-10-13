@@ -53,7 +53,7 @@ class ActorSystemConfiguration {
         val cloudDriverService = CloudDriverInit(cloudDriverApiUrl).constructService(okClient)
         val clusterDetail = cloudDriverService.getClusterDetail(currentApp, currentAccount, currentCluster).get(0)
         val serverGroups = clusterDetail.serverGroups
-        val seeds: List[String] = if (serverGroups.nonEmpty) {
+        val seeds: Seq[String] = if (serverGroups.nonEmpty) {
           val allInstancesInCluster = serverGroups.flatMap(_.instances)
           allInstancesInCluster map (instance => s"akka.tcp://$actorSystemName@${instance.privateIpAddress}:$clusterPort")
         } else {

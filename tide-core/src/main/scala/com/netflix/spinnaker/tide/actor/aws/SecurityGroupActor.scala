@@ -22,7 +22,6 @@ import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor.{SecurityGroupComparableAttributes, DiffSecurityGroup}
-import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor.DiffServerGroup
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor.{GetDiff, DiffAttributes}
 import com.netflix.spinnaker.tide.actor.service.{CloudDriverActor, ConstructCloudDriverOperations}
@@ -35,9 +34,8 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
 
   override def persistenceId: String = self.path.name
 
-  def scheduler = context.system.scheduler
   private implicit val dispatcher = context.dispatcher
-  var latestStateTimeout = scheduler.scheduleOnce(20 seconds, self, LatestStateTimeout)
+  context.setReceiveTimeout(5 minutes)
 
   val clusterSharding = ClusterSharding.get(context.system)
 
@@ -45,58 +43,50 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
   var desiredState: Option[UpsertSecurityGroup] = None
   var latestState: Option[SecurityGroupLatestState] = None
 
-  override def postStop(): Unit = latestStateTimeout.cancel()
-
   override def receiveCommand: Receive = {
-    case wrapper: AwsResourceProtocol[_] =>
-      handleAwsResourceProtocol(wrapper.awsReference.asInstanceOf[AwsReference[SecurityGroupIdentity]],
-        wrapper.event.asInstanceOf[SecurityGroupEvent])
+    case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
 
-    case LatestStateTimeout =>
+    case wrapper: AwsResourceProtocol[_] =>
+      handleAwsResourceProtocol(wrapper.awsReference.asInstanceOf[AwsReference[SecurityGroupIdentity]], wrapper.event)
+  }
+
+  private def handleAwsResourceProtocol(newAwsReference: AwsReference[SecurityGroupIdentity],
+                                        event: ResourceEvent) = event match {
+
+    case event: GetSecurityGroup =>
+      this.awsReference = newAwsReference
+      sender() ! new SecurityGroupDetails(newAwsReference, latestState, desiredState)
+
+    case event: ClearLatestState =>
+      this.awsReference = newAwsReference
       if (latestState.isDefined) {
-        persist(ClearLatestState()) { it =>
+        persist(event) { it =>
           updateState(it)
           val comparableEvent = DiffSecurityGroup(awsReference, None)
           clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
         }
-      } else {
-        context.parent ! Passivate(stopMessage = PoisonPill)
       }
-      if (desiredState.isDefined) {
-        self ! MutateState()
-      }
-
-    case event: MutateState =>
-      desiredState.foreach(mutate)
-  }
-
-  private def handleAwsResourceProtocol(newAwsReference: AwsReference[SecurityGroupIdentity],
-                                        event: SecurityGroupEvent) = event match {
-
-    case event: GetSecurityGroup =>
-      updateReferences(newAwsReference)
-      sender() ! new SecurityGroupDetails(newAwsReference, latestState, desiredState)
 
     case event: UpsertSecurityGroup =>
-      updateReferences(newAwsReference)
+      this.awsReference = newAwsReference
       if (desiredState != Option(event)) {
-        persist(event) { e => updateState(event) }
+        persist(event) { e =>
+          updateState(event)
+          desiredState.foreach(mutate)
+        }
       }
-      self ! MutateState()
 
     case event: SecurityGroupLatestState =>
-      updateReferences(newAwsReference)
-      latestStateTimeout.cancel()
-      latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
+      this.awsReference = newAwsReference
       if (latestState != Option(event)) {
         persist(event) { e =>
           updateState(event)
           val comparableEvent = DiffSecurityGroup(awsReference,
             Option(SecurityGroupComparableAttributes.from(event.state)))
           clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
+          desiredState.foreach(mutate)
         }
       }
-      self ! MutateState()
   }
 
   private def mutate(upsertSecurityGroup: UpsertSecurityGroup) = {
@@ -108,22 +98,14 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
         cloudDriverActor ! AwsResourceProtocol(awsReference, eventWithoutIngress)
         cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
       case Some(latest) =>
-        val latestOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, latest.state)
-        val upsertOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, upsertSecurityGroup.state)
-        if (latestOp == upsertOp) {
-          persist(ClearDesiredState())(it => updateState(it))
-        } else {
-          if (upsertSecurityGroup.overwrite || latest.state.ipPermissions.isEmpty) {
+        if (upsertSecurityGroup.overwrite) {
+          val latestOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, latest.state)
+          val upsertOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, upsertSecurityGroup.state)
+          if (latestOp != upsertOp) {
             cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
-          } else {
-            persist(ClearDesiredState())(it => updateState(it))
           }
         }
     }
-  }
-
-  private def updateReferences(awsReference: AwsReference[SecurityGroupIdentity]) = {
-    this.awsReference = awsReference
   }
 
   private def updateState(event: Any) = {
@@ -134,8 +116,6 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
         latestState = Option(event)
       case event: ClearLatestState =>
         latestState = None
-      case event: ClearDesiredState =>
-        desiredState = None
       case _ => Nil
     }
   }

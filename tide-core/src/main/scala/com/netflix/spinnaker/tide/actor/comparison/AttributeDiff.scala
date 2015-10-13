@@ -1,7 +1,7 @@
 package com.netflix.spinnaker.tide.actor.comparison
 
 case class AttributeDiff[T] private[AttributeDiff] (allIdentifiers: Set[T],
-                                                    attributeGroups: List[AttributeGroup[T]]) {
+                                                    attributeGroups: Seq[AttributeGroup[T]]) {
 
   def removeResource(newIdentifier: T): AttributeDiff[T] = {
     AttributeDiff(allIdentifiers - newIdentifier, AttributeDiff.removeIdentifierFromAttributeGroups(newIdentifier, attributeGroups))
@@ -32,7 +32,7 @@ case class AttributeDiff[T] private[AttributeDiff] (allIdentifiers: Set[T],
     if (unmatchedResourceAttributes.nonEmpty) {
       identifiersToCommonAttributes += (Set(newIdentifier) -> unmatchedResourceAttributes)
     }
-    var newAttributeGroups: List[AttributeGroup[T]] = identifiersToCommonAttributes.map {
+    var newAttributeGroups: Seq[AttributeGroup[T]] = identifiersToCommonAttributes.map {
       case (identifiers, commonAttributes) => AttributeGroup(identifiers, commonAttributes)
     }.toList
     val sortedNewAttributeGroups = newAttributeGroups.sortBy(_.identifiers.size).reverse
@@ -50,7 +50,7 @@ object AttributeDiff {
   }
 
   def removeIdentifierFromAttributeGroups[T](identifier: T,
-                                             attributeGroups: List[AttributeGroup[T]]): List[AttributeGroup[T]] = {
+                                             attributeGroups: Seq[AttributeGroup[T]]): Seq[AttributeGroup[T]] = {
     attributeGroups.map { attributeGroup =>
       attributeGroup.copy(identifiers = attributeGroup.identifiers - identifier)
     }.filter(_.identifiers.nonEmpty)

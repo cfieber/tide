@@ -36,46 +36,39 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
 
   val clusterSharding = ClusterSharding.get(context.system)
 
-  context.setReceiveTimeout(60 seconds)
-  def scheduler = context.system.scheduler
   private implicit val dispatcher = context.dispatcher
-  var latestStateTimeout = scheduler.scheduleOnce(30 seconds, self, LatestStateTimeout)
+  context.setReceiveTimeout(5 minutes)
 
   var awsReference: AwsReference[ServerGroupIdentity] = _
   var latestState: Option[ServerGroupLatestState] = None
 
-  override def postStop(): Unit = latestStateTimeout.cancel()
-
   override def receiveCommand: Receive = {
+    case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
+
     case wrapper: AwsResourceProtocol[_] =>
       val reference = wrapper.awsReference.asInstanceOf[AwsReference[ServerGroupIdentity]]
-      val serverGroupEvent = wrapper.event.asInstanceOf[ServerGroupEvent]
-      handleAwsResourceProtocol(reference, serverGroupEvent)
+      handleAwsResourceProtocol(reference, wrapper.event)
 
-    case LatestStateTimeout =>
+  }
+
+  private def handleAwsResourceProtocol(newAwsReference: AwsReference[ServerGroupIdentity],
+                                        event: ResourceEvent) = event match {
+    case event: GetServerGroup =>
+      this.awsReference = newAwsReference
+      sender() ! new ServerGroupDetails(newAwsReference, latestState)
+
+    case event: ClearLatestState =>
+      this.awsReference = newAwsReference
       if (latestState.isDefined) {
-        persist(ClearLatestState()) { it =>
+        persist(event) { it =>
           updateState(it)
           val comparableEvent = DiffServerGroup(awsReference, None)
           clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
         }
-      } else {
-        context.parent ! Passivate(stopMessage = PoisonPill)
       }
 
-    case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
-  }
-
-  private def handleAwsResourceProtocol(newAwsReference: AwsReference[ServerGroupIdentity],
-                                        event: ServerGroupEvent) = event match {
-    case event: GetServerGroup =>
-      updateReferences(newAwsReference)
-      sender() ! new ServerGroupDetails(newAwsReference, latestState)
-
     case event: ServerGroupLatestState =>
-      updateReferences(newAwsReference)
-      latestStateTimeout.cancel()
-      latestStateTimeout = scheduler.scheduleOnce(60 seconds, self, LatestStateTimeout)
+      this.awsReference = newAwsReference
       if (latestState != Option(event)) {
         persist(event) { e =>
           updateState(event)
@@ -84,10 +77,6 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
           clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
         }
       }
-  }
-
-  private def updateReferences(newAwsReference: AwsReference[ServerGroupIdentity]) = {
-    awsReference = newAwsReference
   }
 
   private def updateState(event: ResourceEvent) = {

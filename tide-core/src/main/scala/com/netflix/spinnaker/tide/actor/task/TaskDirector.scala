@@ -66,7 +66,7 @@ class TaskDirector extends PersistentActor with ActorLogging {
         sender() ! ChildTaskGroupComplete(childTasks.parentTaskId, Nil)
       }
       val taskCluster = getShardCluster(TaskActor.typeName)
-      val executeTasks: List[ExecuteTask] = childTasks.descriptions.map { taskDescription =>
+      val executeTasks: Seq[ExecuteTask] = childTasks.descriptions.map { taskDescription =>
         val executeTask = ExecuteTask(nextTaskId.toString, taskDescription, Option(childTasks.parentTaskId))
         nextTaskId = nextTaskId + 1
         self ! executeTask
@@ -115,6 +115,6 @@ object TaskDirector extends SingletonActorObject {
     def taskType: String
     def executionActorTypeName: String
   }
-  case class ChildTaskDescriptions(parentTaskId: String, descriptions: List[TaskDescription]) extends TaskDirectorProtocol
+  case class ChildTaskDescriptions(parentTaskId: String, descriptions: Seq[TaskDescription]) extends TaskDirectorProtocol
 
 }

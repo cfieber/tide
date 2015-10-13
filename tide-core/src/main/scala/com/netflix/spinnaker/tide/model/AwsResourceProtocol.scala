@@ -30,10 +30,7 @@ sealed trait SecurityGroupEvent extends ResourceEvent
 sealed trait LoadBalancerEvent extends ResourceEvent
 sealed trait ServerGroupEvent extends ResourceEvent
 
-case class LatestStateTimeout() extends ResourceEvent
 case class ClearLatestState() extends ResourceEvent
-case class ClearDesiredState() extends ResourceEvent
-case class MutateState() extends ResourceEvent
 
 case class GetSecurityGroup() extends SecurityGroupEvent
 case class UpsertSecurityGroup(state: SecurityGroupState, overwrite: Boolean = true) extends SecurityGroupEvent

@@ -22,8 +22,8 @@ import com.netflix.spinnaker.tide.actor.ContractActorImpl
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPoll, EddaPollingProtocol}
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.{LatestSecurityGroupIdToNameMappings, GetSecurityGroupIdToNameMappings}
 import com.netflix.spinnaker.tide.actor.service.EddaActor
-import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundSecurityGroups, FoundLoadBalancers, RetrieveSecurityGroups}
-import com.netflix.spinnaker.tide.model.{AwsResourceProtocol, SecurityGroupLatestState, AwsApi}
+import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundSecurityGroups, RetrieveSecurityGroups}
+import com.netflix.spinnaker.tide.model.{ClearLatestState, AwsResourceProtocol, SecurityGroupLatestState, AwsApi}
 import AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor
 
@@ -35,6 +35,8 @@ class SecurityGroupPollingActor extends PollingActor {
 
   var location: AwsLocation = _
   var securityGroupIdToName: Map[String, SecurityGroupIdentity] = _
+
+  var currentIds: Seq[SecurityGroupIdentity] = Nil
 
   override def receive: Receive = {
     case msg: GetSecurityGroupIdToNameMappings =>
@@ -49,6 +51,15 @@ class SecurityGroupPollingActor extends PollingActor {
 
     case msg: FoundSecurityGroups =>
       val securityGroups = msg.resources
+
+      val oldIds = currentIds
+      currentIds = securityGroups.map(_.identity)
+      val removedIds = oldIds.toSet -- currentIds.toSet
+      removedIds.foreach { identity =>
+        val reference = AwsReference(location, identity)
+        clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(reference, ClearLatestState())
+      }
+
       securityGroupIdToName = securityGroups.map { securityGroup =>
         securityGroup.groupId -> securityGroup.identity
       }.toMap

@@ -84,10 +84,10 @@ case class ResourceTracker(source: VpcLocation, target: VpcLocation, vpcIds: Vpc
     sourceSecurityGroupToId.contains(sourceResource)
   }
 
-  def unseenSourceSecurityGroupReferences: List[AwsReference[SecurityGroupIdentity]] = {
+  def unseenSourceSecurityGroupReferences: Seq[AwsReference[SecurityGroupIdentity]] = {
     val sourceIdentities = sourceByTarget.values.map(_.ref.identity).toList
     val sourceSecurityGroupIdentities = sourceIdentities.filter(_.isInstanceOf[SecurityGroupIdentity]).
-      asInstanceOf[List[SecurityGroupIdentity]]
+      asInstanceOf[Seq[SecurityGroupIdentity]]
     val allSourceSecurityGroupNames = sourceSecurityGroupIdentities.map(_.groupName)
     val seenSourceSecurityGroupNames = sourceSecurityGroupToId.keys.toList
     allSourceSecurityGroupNames.diff(seenSourceSecurityGroupNames).map { unseenSourceSecurityGroupName =>
