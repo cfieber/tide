@@ -46,14 +46,6 @@ allprojects {
   sourceCompatibility = "1.8"
   targetCompatibility = "1.8"
 
-  configurations.all {
-    exclude group: "javax.servlet", module: "servlet-api"
-    exclude group: "org.slf4j", module: "slf4j-log4j12"
-    resolutionStrategy {
-      force "com.google.guava:guava:16.0.1"
-    }
-  }
-
   ext {
     versions = [
       scala  : "2.11",
@@ -62,14 +54,7 @@ allprojects {
     ]
   }
 
-  repositories {
-    maven { url "http://dl.bintray.com/krasserm/maven/" }
-    maven { url "http://dl.bintray.com/jdgoldie/maven" }
-  }
-
   dependencies {
-    compile "javax.inject:javax.inject:1"
-    compile spinnaker.dependency("slf4jApi")
     compile "org.scala-lang:scala-library:$versions.scala.6"
     compile "com.typesafe.akka:akka-actor_$versions.scala:$versions.akka"
     compile "com.typesafe.akka:akka-persistence-experimental_$versions.scala:$versions.akka"
@@ -86,7 +71,6 @@ allprojects {
     testCompile "org.scalamock:scalamock-scalatest-support_$versions.scala:3.2"
 
     testRuntime "com.github.jdgoldie:akka-persistence-shared-inmemory_$versions.scala:1.0.16"
-    testRuntime spinnaker.dependency("slf4jSimple")
   }
 }
 
