@@ -45,6 +45,18 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     super.preRestart(reason, message)
   }
 
+  def findVpcId(vpcName: Option[String], vpcs: Seq[Vpc]): Option[String] = {
+    vpcName match {
+      case None => None
+      case Some(name) =>
+        val vpcId = vpcs.find(_.name == vpcName).map(_.vpcId)
+        vpcId match {
+          case None => throw new IllegalStateException(s"No VPC named '$name'.")
+          case _ => vpcId
+        }
+    }
+  }
+
   override def receiveCommand: Receive = {
 
     case ContinueTask(ExecuteTask(_, task: DependencyCopyTask, _)) =>
@@ -57,20 +69,16 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case latestVpcs: LatestVpcs =>
-      val sourceVpc = latestVpcs.resources.find(_.name == task.source.vpcName).map(_.vpcId)
-      val targetVpc = latestVpcs.resources.find(_.name == task.target.vpcName).map(_.vpcId)
-      if (targetVpc.isEmpty) {
-        sendTaskEvent(TaskFailure(taskId, task, s"No VPC named '${task.target.vpcName}'.", None))
-      } else {
-        persist(VpcIds(sourceVpc, targetVpc)) { it =>
-          updateState(it)
-          checkForCreatedResources = scheduler.schedule(25 seconds, 25 seconds, self, CheckCompletion())
-          task.requiredSecurityGroupNames.foreach { it =>
-            self ! RequiresSource(resourceTracker.asSourceSecurityGroupReference(it), None)
-          }
-          task.sourceLoadBalancerNames.foreach { it =>
-            self ! RequiresSource(resourceTracker.asSourceLoadBalancerReference(it), None)
-          }
+      val sourceVpcId = findVpcId(task.source.vpcName, latestVpcs.resources)
+      val targetVpcId = findVpcId(task.target.vpcName, latestVpcs.resources)
+      persist(VpcIds(sourceVpcId, targetVpcId)) { it =>
+        updateState(it)
+        checkForCreatedResources = scheduler.schedule(25 seconds, 25 seconds, self, CheckCompletion())
+        task.requiredSecurityGroupNames.foreach { it =>
+          self ! RequiresSource(resourceTracker.asSourceSecurityGroupReference(it), None)
+        }
+        task.sourceLoadBalancerNames.foreach { it =>
+          self ! RequiresSource(resourceTracker.asSourceLoadBalancerReference(it), None)
         }
       }
 
@@ -183,9 +191,11 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
           event.latestState match {
             case None => Nil
             case Some(latestState) =>
-              latestState.state.securityGroups.foreach { name =>
-                val referencedSourceSecurityGroup = resourceTracker.asSourceSecurityGroupReference(name)
-                self ! RequiresSource(referencedSourceSecurityGroup, Some(resource.ref))
+              if (vpcIds.target.isDefined) {
+                latestState.state.securityGroups.foreach { name =>
+                  val referencedSourceSecurityGroup = resourceTracker.asSourceSecurityGroupReference(name)
+                  self ! RequiresSource(referencedSourceSecurityGroup, Some(resource.ref))
+                }
               }
               val targetResource = resourceTracker.transformToTarget(resource)
               val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)

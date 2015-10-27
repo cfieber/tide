@@ -26,12 +26,14 @@ sealed trait AwsProtocol extends Serializable
 object AwsApi {
 
   def constructTargetSubnetType(sourceSubnetType: Option[String], targetVpcName: Option[String]): Option[String] = {
-    sourceSubnetType.map{ subnetType =>
-      val cleanSubnetType = subnetType.replaceAll("DEPRECATED_", "").replaceAll("-elb", "").replaceAll("-ec2", "")
-      targetVpcName match {
-        case Some(vpcName) => s"${cleanSubnetType.split(" ").head} ($vpcName)"
-        case None => s"${cleanSubnetType.split(" ").head}"
-      }
+    sourceSubnetType match {
+      case Some(subnetType) =>
+        val cleanSubnetType = subnetType.replaceAll("DEPRECATED_", "").replaceAll("-elb", "").replaceAll("-ec2", "")
+        targetVpcName match {
+          case Some(vpcName) => Option(s"${cleanSubnetType.split(" ").head} ($vpcName)")
+          case _ => None
+        }
+      case _ => None
     }
   }
 
@@ -141,6 +143,8 @@ object AwsApi {
       val sourceVpcNameRemoved = sourceVpcNameOption match {
         case Some(vpcName) if loadBalancerName.endsWith(s"-$vpcName") =>
           loadBalancerName.dropRight(s"-$vpcName".length)
+        case None if loadBalancerName.endsWith("-classic") =>
+          loadBalancerName.dropRight("-classic".length)
         case _ => loadBalancerName
       }
       val legacySuffixesRemoved = sourceVpcNameRemoved match {
@@ -156,14 +160,14 @@ object AwsApi {
 
       val targetVpcNameAdded = targetVpcNameOption match {
         case Some(vpcName) => s"$truncateAsLastResort-$vpcName"
-        case _ => truncateAsLastResort
+        case _ => s"$truncateAsLastResort-classic"
       }
       LoadBalancerIdentity(targetVpcNameAdded)
     }
 
     @JsonIgnore def isConsistentWithVpc(vpcNameOption: Option[String]): Boolean = {
       vpcNameOption match {
-        case None => loadBalancerName.endsWith("-frontend")
+        case None => loadBalancerName.endsWith("-classic")
         case Some(vpcName) => loadBalancerName.endsWith(s"-$vpcName")
       }
     }
@@ -177,7 +181,9 @@ object AwsApi {
                                subnetType: Option[String])  extends AwsProtocol {
 
     def forVpc(vpcName: Option[String], vpcId: Option[String]): LoadBalancerState = {
-      this.copy(vpcId = vpcId, subnetType = constructTargetSubnetType(subnetType, vpcName))
+      val securityGroups: Set[String] = if (vpcId.isDefined) this.securityGroups else Set()
+      this.copy(vpcId = vpcId, subnetType = constructTargetSubnetType(subnetType, vpcName),
+        securityGroups = securityGroups)
     }
 
     def convertToSecurityGroupNames(securityGroupIdToName: Map[String, SecurityGroupIdentity]): LoadBalancerState = {

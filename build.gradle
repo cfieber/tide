@@ -46,6 +46,14 @@ allprojects {
   sourceCompatibility = "1.8"
   targetCompatibility = "1.8"
 
+  configurations.all {
+    exclude group: "javax.servlet", module: "servlet-api"
+    exclude group: "org.slf4j", module: "slf4j-log4j12"
+    resolutionStrategy {
+      force "com.google.guava:guava:16.0.1"
+    }
+  }
+
   ext {
     versions = [
       scala  : "2.11",

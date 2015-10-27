@@ -85,6 +85,8 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
           clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
           desiredState.foreach(mutate)
         }
+      } else {
+        desiredState.foreach(mutate)
       }
   }
 
@@ -93,14 +95,16 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
     latestState match {
       case None =>
         cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
-      case Some(latest) =>
-        if (upsertLoadBalancer.overwrite) {
-          val latestOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, latest.state)
-          val upsertOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, upsertLoadBalancer.state)
-          if (latestOp != upsertOp) {
-            cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
-          }
+      case Some(latest) if upsertLoadBalancer.overwrite =>
+        val latestOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, latest.state)
+        val upsertOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, upsertLoadBalancer.state)
+        if (latestOp != upsertOp) {
+          cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
+        } else {
+          desiredState = None
         }
+      case Some(latest) =>
+        desiredState = None
     }
   }
 
