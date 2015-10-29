@@ -19,11 +19,12 @@ package com.netflix.spinnaker.tide.actor.polling
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.ContractActorImpl
+import com.netflix.spinnaker.tide.actor.aws.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPoll, EddaPollingProtocol}
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.{LatestVpcs, GetVpcs}
 import com.netflix.spinnaker.tide.actor.service.EddaActor
 import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundVpcs, RetrieveSecurityGroups, RetrieveVpcs}
-import com.netflix.spinnaker.tide.model.AwsApi
+import com.netflix.spinnaker.tide.model.{AkkaClustered, AwsApi}
 import AwsApi._
 
 class VpcPollingActor extends PollingActor {
@@ -51,6 +52,7 @@ class VpcPollingActor extends PollingActor {
       val latestVpcs = LatestVpcs(location, vpcs)
       clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! latestVpcs
       clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! latestVpcs
+      clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! latestVpcs
   }
 
 }
@@ -59,5 +61,7 @@ object VpcPollingActor extends PollingActorObject {
   val props = Props[VpcPollingActor]
 
   case class GetVpcs(location: AwsLocation) extends EddaPollingProtocol
-  case class LatestVpcs(location: AwsLocation, resources: Seq[Vpc]) extends EddaPollingProtocol
+  case class LatestVpcs(location: AwsLocation, resources: Seq[Vpc]) extends EddaPollingProtocol with AkkaClustered {
+    override def akkaIdentifier: String = location.akkaIdentifier
+  }
 }

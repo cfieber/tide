@@ -30,11 +30,11 @@ trait EddaService {
   def loadBalancers: Seq[LoadBalancer]
 
   @Headers(Array("Accept: application/json"))
-  @GET("/aws/launchConfigurations;_expand:(associatePublicIpAddress,blockDeviceMappings,classicLinkVPCId,classicLinkVPCSecurityGroups,createdTime,ebsOptimized,iamInstanceProfile,imageId,instanceMonitoring,instanceType,kernelId,keyName,launchConfigurationName,placementTenancy,ramdiskId,securityGroups,spotPrice)")
+  @GET("/aws/launchConfigurations;_expand:(associatePublicIpAddress,blockDeviceMappings,classicLinkVPCId,classicLinkVPCSecurityGroups,createdTime,ebsOptimized,iamInstanceProfile,imageId,instanceMonitoring,instanceType,kernelId,keyName,launchConfigurationName,placementTenancy,ramdiskId,securityGroups,spotPrice,classicLinkVPCId)")
   def launchConfigurations: Seq[LaunchConfiguration]
 
   @Headers(Array("Accept: application/json"))
-  @GET("/aws/autoScalingGroups;_expand:(VPCZoneIdentifier,autoScalingGroupName,availabilityZones,createdTime,defaultCooldown,desiredCapacity,enabledMetrics,healthCheckGracePeriod,healthCheckType,launchConfigurationName,loadBalancerNames,maxSize,minSize,placementGroup,status,suspendedProcesses,terminationPolicies)")
+  @GET("/aws/autoScalingGroups;_expand:(VPCZoneIdentifier,autoScalingGroupName,availabilityZones,createdTime,defaultCooldown,desiredCapacity,enabledMetrics,healthCheckGracePeriod,healthCheckType,launchConfigurationName,loadBalancerNames,maxSize,minSize,placementGroup,status,suspendedProcesses,terminationPolicies,instances:(instanceId))")
   def autoScalingGroups: Seq[AutoScalingGroup]
 
   @Headers(Array("Accept: application/json"))
@@ -44,6 +44,14 @@ trait EddaService {
   @Headers(Array("Accept: application/json"))
   @GET("/aws/vpcs;_expand:(cidrBlock,dhcpOptionsId,instanceTenancy,isDefault,state,tags:(key,value),vpcId)")
   def vpcs: Seq[Vpc]
+
+  @Headers(Array("Accept: application/json"))
+  @GET("/aws/vpcClassicLinks;_expand:(vpcId,classicLinkEnabled)")
+  def vpcClassicLinks: Seq[VpcClassicLink]
+
+  @Headers(Array("Accept: application/json"))
+  @GET("/aws/classicLinkInstances")
+  def classicLinkInstanceIds: Seq[String]
 
 }
 

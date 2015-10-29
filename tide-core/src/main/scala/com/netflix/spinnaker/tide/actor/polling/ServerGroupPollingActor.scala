@@ -18,15 +18,16 @@ package com.netflix.spinnaker.tide.actor.polling
 
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor
-import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPoll
+import com.netflix.spinnaker.tide.actor.aws.{ClassicLinkInstancesActor, ServerGroupActor}
+import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPollingProtocol, EddaPoll}
 import com.netflix.spinnaker.tide.actor.polling.LaunchConfigPollingActor.LatestLaunchConfigs
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.LatestSecurityGroupIdToNameMappings
+import com.netflix.spinnaker.tide.actor.polling.ServerGroupPollingActor.NonclassicLinkedLaunchConfigEc2ClassicInstanceIds
 import com.netflix.spinnaker.tide.actor.polling.SubnetPollingActor.LatestSubnets
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.LatestVpcs
 import com.netflix.spinnaker.tide.actor.service.EddaActor
 import com.netflix.spinnaker.tide.actor.service.EddaActor._
-import com.netflix.spinnaker.tide.model.{ClearLatestState, AwsResourceProtocol, ServerGroupLatestState, AwsApi}
+import com.netflix.spinnaker.tide.model._
 import AwsApi._
 
 class ServerGroupPollingActor() extends PollingActor {
@@ -79,6 +80,8 @@ class ServerGroupPollingActor() extends PollingActor {
         autoScalingGroups.foreach { autoScalingGroup =>
           launchConfigNameToAutoScalingGroup += (autoScalingGroup.state.launchConfigurationName -> autoScalingGroup)
         }
+        var nonClassicLinkedLaunchConfigInstanceIds: Seq[String] = Nil
+
         latestLaunchConfigs.resources.foreach { launchConfiguration =>
           val autoScalingGroupOption: Option[AutoScalingGroup] = launchConfigNameToAutoScalingGroup.
             get(launchConfiguration.identity.launchConfigurationName)
@@ -90,8 +93,15 @@ class ServerGroupPollingActor() extends PollingActor {
             val latestState = ServerGroupLatestState(normalizedAutoScalingGroupState, normalizedLaunchConfigurationState)
             clusterSharding.shardRegion(ServerGroupActor.typeName) ! AwsResourceProtocol(AwsReference(location,
               autoScalingGroup.identity), latestState)
+            if (launchConfiguration.state.classicLinkVPCId.isEmpty &&
+              autoScalingGroup.state.vpcName.isEmpty &&
+              Option(autoScalingGroup.instances).isDefined) {
+              nonClassicLinkedLaunchConfigInstanceIds ++= autoScalingGroup.instances.map(_.instanceId)
+            }
           }
         }
+        clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) !
+          NonclassicLinkedLaunchConfigEc2ClassicInstanceIds(location, nonClassicLinkedLaunchConfigInstanceIds.distinct)
       }
   }
 
@@ -99,6 +109,10 @@ class ServerGroupPollingActor() extends PollingActor {
 
 object ServerGroupPollingActor extends PollingActorObject {
   val props = Props[ServerGroupPollingActor]
+
+  case class NonclassicLinkedLaunchConfigEc2ClassicInstanceIds(location: AwsLocation, instanceIds: Seq[String]) extends EddaPollingProtocol with AkkaClustered {
+    override def akkaIdentifier: String = location.akkaIdentifier
+  }
 }
 
 

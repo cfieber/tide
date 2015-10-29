@@ -28,7 +28,7 @@ import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPoll
 import com.netflix.spinnaker.tide.actor.polling.PipelinePollingActor.PipelinePoll
 import com.netflix.spinnaker.tide.actor.polling._
 import com.netflix.spinnaker.tide.actor.service.CloudDriverActor.CloudDriverInit
-import com.netflix.spinnaker.tide.actor.service.EddaActor.EddaInit
+import com.netflix.spinnaker.tide.actor.service.EddaActor._
 import com.netflix.spinnaker.tide.actor.service.Front50Actor.Front50Init
 import com.netflix.spinnaker.tide.actor.service.{Front50Actor, EddaActor, CloudDriverActor}
 import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector}
@@ -67,6 +67,7 @@ class AkkaClusterConfiguration {
     SecurityGroupActor.startCluster(clusterSharding)
     LoadBalancerActor.startCluster(clusterSharding)
     ServerGroupActor.startCluster(clusterSharding)
+    ClassicLinkInstancesActor.startCluster(clusterSharding)
     PipelineActor.startCluster(clusterSharding)
 
     VpcPollingActor.startCluster(clusterSharding)
@@ -76,6 +77,7 @@ class AkkaClusterConfiguration {
     ServerGroupPollingActor.startCluster(clusterSharding)
     LaunchConfigPollingActor.startCluster(clusterSharding)
     PipelinePollingActor.startCluster(clusterSharding)
+    ClassicLinkInstanceIdPollingActor.startCluster(clusterSharding)
 
     ServerGroupDeepCopyActor.startCluster(clusterSharding)
     PipelineDeepCopyActor.startCluster(clusterSharding)
@@ -94,10 +96,11 @@ class AkkaClusterConfiguration {
 
     clusterSharding.shardRegion(PipelinePollingActor.typeName) ! PipelinePoll()
 
-    val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, SubnetPollingActor,
+    val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, SubnetPollingActor, ClassicLinkInstanceIdPollingActor,
       SecurityGroupPollingActor, LoadBalancerPollingActor, LaunchConfigPollingActor, ServerGroupPollingActor)
-    val resourceTypes: List[Class[_]] =List(classOf[Vpc], classOf[Subnet], classOf[SecurityGroup],
-      classOf[LoadBalancer], classOf[AutoScalingGroup], classOf[LaunchConfiguration])
+    val resourceTypes: List[Class[_]] =List(classOf[RetrieveSecurityGroups], classOf[RetrieveLoadBalancers],
+      classOf[RetrieveLaunchConfigurations], classOf[RetrieveAutoScalingGroups], classOf[RetrieveSubnets],
+      classOf[RetrieveVpcs], classOf[RetrieveClassicLinkInstanceIds])
     val accounts = eddaSettings.getAccountToRegionsMapping.keySet()
     for (account <- accounts) {
       val regions: java.util.List[String] = eddaSettings.getAccountToRegionsMapping.get(account)

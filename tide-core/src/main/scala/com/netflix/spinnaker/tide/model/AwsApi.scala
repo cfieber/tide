@@ -88,7 +88,8 @@ object AwsApi {
                                  @JsonUnwrapped @JsonProperty("state") state: LaunchConfigurationState) extends AwsProtocol
 
   case class AutoScalingGroup(@JsonUnwrapped @JsonProperty("identity") identity: AutoScalingGroupIdentity,
-                              @JsonUnwrapped @JsonProperty("state") state: AutoScalingGroupState) extends AwsProtocol
+                              @JsonUnwrapped @JsonProperty("state") state: AutoScalingGroupState,
+                              instances: Seq[Instance]) extends AwsProtocol
 
   case class Tag(key: String, value: String)
 
@@ -227,7 +228,8 @@ object AwsApi {
                                       ebsOptimized: Boolean, iamInstanceProfile: String, imageId: String,
                                       instanceMonitoring: InstanceMonitoring, instanceType: String, kernelId: String,
                                       keyName: String, ramdiskId: String,
-                                      securityGroups: Set[String], spotPrice: Option[String]) extends AwsProtocol {
+                                      securityGroups: Set[String], spotPrice: Option[String],
+                                      classicLinkVPCId: Option[String]) extends AwsProtocol {
     def convertToSecurityGroupNames(securityGroupIdToName: Map[String, SecurityGroupIdentity]): LaunchConfigurationState = {
       copy(securityGroups = normalizeSecurityGroupNames(securityGroups, securityGroupIdToName))
     }
@@ -248,6 +250,10 @@ object AwsApi {
   }
 
   type ServerGroupIdentity = AutoScalingGroupIdentity
+
+  case class InstanceIdentity(instanceId: String) extends AwsIdentity {
+    @JsonIgnore def akkaIdentifier: String = s"Instance.$instanceId"
+  }
 
   case class AutoScalingGroupState(createdTime: Long,
                                    VPCZoneIdentifier: String,
@@ -316,11 +322,14 @@ object AwsApi {
 
   case class Vpc(vpcId: String,
                  cidrBlock: String, dhcpOptionsId: String, instanceTenancy: String, isDefault: Boolean, state: String,
-                 tags: Seq[Tag]) extends AwsProtocol {
+                 tags: Seq[Tag], classicLinkEnabled: Boolean) extends AwsProtocol {
     def name: Option[String] = {
       val nameTagOption: Option[Tag] = tags.find(_.key == "Name")
       nameTagOption.map(_.value)
     }
   }
 
+  case class VpcClassicLink(vpcId: String, classicLinkEnabled: Boolean)
+
+  case class Instance(instanceId: String)
 }
