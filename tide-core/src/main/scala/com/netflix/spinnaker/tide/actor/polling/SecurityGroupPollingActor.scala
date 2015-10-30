@@ -23,9 +23,9 @@ import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPoll, Edda
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.{LatestSecurityGroupIdToNameMappings, GetSecurityGroupIdToNameMappings}
 import com.netflix.spinnaker.tide.actor.service.EddaActor
 import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundSecurityGroups, RetrieveSecurityGroups}
-import com.netflix.spinnaker.tide.model.{ClearLatestState, AwsResourceProtocol, SecurityGroupLatestState, AwsApi}
+import com.netflix.spinnaker.tide.model._
 import AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor
+import com.netflix.spinnaker.tide.actor.aws.{ClassicLinkInstancesActor, SecurityGroupActor}
 
 class SecurityGroupPollingActor extends PollingActor {
 
@@ -66,7 +66,8 @@ class SecurityGroupPollingActor extends PollingActor {
       val securityGroupIdToNameMsg = LatestSecurityGroupIdToNameMappings(location, securityGroupIdToName)
       clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! securityGroupIdToNameMsg
       clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! securityGroupIdToNameMsg
-      securityGroups.foreach { securityGroup =>
+      clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! securityGroupIdToNameMsg
+        securityGroups.foreach { securityGroup =>
         val normalizedState = securityGroup.state.ensureSecurityGroupNameOnIngressRules(securityGroupIdToName)
         val latestState = SecurityGroupLatestState(securityGroup.groupId, normalizedState)
         val reference = AwsReference(location, securityGroup.identity)
@@ -81,7 +82,9 @@ object SecurityGroupPollingActor extends PollingActorObject {
   val props = Props[SecurityGroupPollingActor]
 
   case class GetSecurityGroupIdToNameMappings(location: AwsLocation) extends EddaPollingProtocol
-  case class LatestSecurityGroupIdToNameMappings(location: AwsLocation, map: Map[String, SecurityGroupIdentity]) extends EddaPollingProtocol
+  case class LatestSecurityGroupIdToNameMappings(location: AwsLocation, map: Map[String, SecurityGroupIdentity]) extends EddaPollingProtocol with AkkaClustered {
+    override def akkaIdentifier: String = location.akkaIdentifier
+  }
 }
 
 trait SecurityGroupPollingContract {

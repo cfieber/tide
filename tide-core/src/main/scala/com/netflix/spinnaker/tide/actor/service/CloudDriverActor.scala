@@ -48,6 +48,12 @@ class CloudDriverActor extends RetrofitServiceActor[CloudDriverService] {
       val taskResult = service.submitTask(op.content())
       sender() ! CloudDriverResponse(service.getTaskDetail(taskResult.id))
 
+    case AwsResourceProtocol(awsReference, event: AttachClassicLinkVpc) =>
+      val ref = awsReference.asInstanceOf[AwsReference[InstanceIdentity]]
+      val op = ConstructCloudDriverOperations.constructAttachClassicLinkVpcOperation(ref, event)
+      val taskResult = service.submitTask(op.content())
+      sender() ! CloudDriverResponse(service.getTaskDetail(taskResult.id))
+
     case event: GetTaskDetail =>
       sender() ! CloudDriverResponse(service.getTaskDetail(event.id))
   }
@@ -134,6 +140,13 @@ object ConstructCloudDriverOperations {
       launchConfiguration.spotPrice, autoScalingGroup.healthCheckType, autoScalingGroup.healthCheckGracePeriod,
       autoScalingGroup.defaultCooldown, isInstanceMonitoringEnabled,
       launchConfiguration.ebsOptimized, cloneServerGroup.startDisabled, Source.from(awsReference))
+  }
+
+  def constructAttachClassicLinkVpcOperation(awsReference: AwsReference[InstanceIdentity],
+                                             attachClassicLinkVpc: AttachClassicLinkVpc): AttachClassicLinkVpcOperation = {
+    val awsLocation = awsReference.location
+    AttachClassicLinkVpcOperation(awsLocation.account, awsLocation.region, awsReference.identity.instanceId,
+      attachClassicLinkVpc.vpcId, attachClassicLinkVpc.securityGroupIds)
   }
 
 }

@@ -134,6 +134,11 @@ object CloudDriverService {
     val operationTypeName = "upsertAmazonLoadBalancerDescription"
   }
 
+  case class AttachClassicLinkVpcOperation(credentials: String, region: String, instanceId: String, vpcId: String,
+                                  securityGroupIds: Seq[String]) extends CloudDriverOperation {
+    val operationTypeName = "attachClassicLinkVpcDescription"
+  }
+
   case class Listener(sslCertificateId: String, externalPort: Int, internalPort: Int, externalProtocol: String,
                       internalProtocol: String)
   object Listener {

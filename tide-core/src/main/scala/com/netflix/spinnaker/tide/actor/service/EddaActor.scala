@@ -17,12 +17,10 @@
 package com.netflix.spinnaker.tide.actor.service
 
 import akka.actor.Props
-import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.config.OkHttpClientConfiguration
-import com.netflix.spinnaker.tide.actor.{ClusteredActorObject, ContractActorImpl}
+import com.netflix.spinnaker.tide.actor.ClusteredActorObject
+import com.netflix.spinnaker.tide.actor.service.EddaActor.{RetrieveSecurityGroups, RetrieveLoadBalancers, RetrieveLaunchConfigurations, RetrieveAutoScalingGroups, RetrieveSubnets, RetrieveVpcs, RetrieveClassicLinkInstanceIds, FoundSecurityGroups, FoundLoadBalancers, FoundLaunchConfigurations, FoundAutoScalingGroups, FoundSubnets, FoundVpcs, FoundClassicLinkInstanceIds}
 import com.netflix.spinnaker.tide.model.{AkkaClustered, AwsApi, EddaService}
 import AwsApi._
-import com.netflix.spinnaker.tide.actor.service.EddaActor.{RetrieveSecurityGroups, RetrieveLoadBalancers, RetrieveLaunchConfigurations, RetrieveAutoScalingGroups, RetrieveSubnets, RetrieveVpcs, FoundSecurityGroups, FoundLoadBalancers, FoundLaunchConfigurations, FoundAutoScalingGroups, FoundSubnets, FoundVpcs}
 
 class EddaActor extends RetrofitServiceActor[EddaService] {
 
@@ -37,8 +35,20 @@ class EddaActor extends RetrofitServiceActor[EddaService] {
       sender ! FoundAutoScalingGroups(service.autoScalingGroups)
     case msg: RetrieveSubnets =>
       sender ! FoundSubnets(service.subnets)
+
     case msg: RetrieveVpcs =>
-      sender ! FoundVpcs(service.vpcs)
+      val vpcs = service.vpcs
+      val vpcClassicLinkLookup: Map[String, Boolean] = service.vpcClassicLinks.map{ vpcClassicLink =>
+        vpcClassicLink.vpcId -> vpcClassicLink.classicLinkEnabled
+      }.toMap
+      val combinedVpcAttributes = vpcs.map { vpc =>
+        vpc.copy(classicLinkEnabled = vpcClassicLinkLookup.getOrElse(vpc.vpcId, false))
+      }
+      sender ! FoundVpcs(combinedVpcAttributes)
+
+    case msg: RetrieveClassicLinkInstanceIds =>
+      val classicLinkInstanceIds = service.classicLinkInstanceIds
+      sender ! FoundClassicLinkInstanceIds(classicLinkInstanceIds)
   }
 }
 
@@ -46,14 +56,14 @@ sealed trait EddaProtocol extends Serializable
 
 sealed trait EddaProtocolInput extends EddaProtocol with AkkaClustered {
   val location: AwsLocation
-  val resourceType: Class[_]
-  override def akkaIdentifier = s"${location.akkaIdentifier}.${resourceType.getSimpleName}"
+  val resourceType: Class[_] = this.getClass
+  override def akkaIdentifier = s"${location.akkaIdentifier}.${resourceType.getCanonicalName}"
 }
 
 object EddaActor extends ClusteredActorObject {
   val props = Props[EddaActor]
 
-  case class EddaInit(location: AwsLocation, eddaUrlTemplate: String, resourceType: Class[_])
+  case class EddaInit(location: AwsLocation, eddaUrlTemplate: String, override val resourceType: Class[_])
     extends EddaProtocolInput with RetrofitServiceInit[EddaService] {
     override val url: String = eddaUrlTemplate
       .replaceAll("%account", location.account)
@@ -61,24 +71,13 @@ object EddaActor extends ClusteredActorObject {
     override val serviceType: Class[EddaService] = classOf[EddaService]
   }
 
-  case class RetrieveSecurityGroups(location: AwsLocation) extends EddaProtocolInput {
-    override val resourceType = classOf[SecurityGroup]
-  }
-  case class RetrieveLoadBalancers(location: AwsLocation) extends EddaProtocolInput {
-    override val resourceType = classOf[LoadBalancer]
-  }
-  case class RetrieveLaunchConfigurations(location: AwsLocation) extends EddaProtocolInput {
-    override val resourceType = classOf[LaunchConfiguration]
-  }
-  case class RetrieveAutoScalingGroups(location: AwsLocation) extends EddaProtocolInput {
-    override val resourceType = classOf[AutoScalingGroup]
-  }
-  case class RetrieveSubnets(location: AwsLocation) extends EddaProtocolInput {
-    override val resourceType = classOf[Subnet]
-  }
-  case class RetrieveVpcs(location: AwsLocation) extends EddaProtocolInput {
-    override val resourceType = classOf[Vpc]
-  }
+  case class RetrieveSecurityGroups(location: AwsLocation) extends EddaProtocolInput
+  case class RetrieveLoadBalancers(location: AwsLocation) extends EddaProtocolInput
+  case class RetrieveLaunchConfigurations(location: AwsLocation) extends EddaProtocolInput
+  case class RetrieveAutoScalingGroups(location: AwsLocation) extends EddaProtocolInput
+  case class RetrieveSubnets(location: AwsLocation) extends EddaProtocolInput
+  case class RetrieveVpcs(location: AwsLocation) extends EddaProtocolInput
+  case class RetrieveClassicLinkInstanceIds(location: AwsLocation) extends EddaProtocolInput
 
   case class FoundSecurityGroups(resources: Seq[SecurityGroup]) extends EddaProtocol
   case class FoundLoadBalancers(resources: Seq[LoadBalancer]) extends EddaProtocol
@@ -86,5 +85,6 @@ object EddaActor extends ClusteredActorObject {
   case class FoundAutoScalingGroups(resources: Seq[AutoScalingGroup]) extends EddaProtocol
   case class FoundSubnets(resources: Seq[Subnet]) extends EddaProtocol
   case class FoundVpcs(resources: Seq[Vpc]) extends EddaProtocol
+  case class FoundClassicLinkInstanceIds(resources: Seq[String]) extends EddaProtocol
 
 }

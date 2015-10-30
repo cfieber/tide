@@ -20,6 +20,7 @@ import akka.actor.ActorRef
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.WebModel.{PipelineVpcMigrateDefinition, DependencyCopyDefinition, VpcDefinition}
+import com.netflix.spinnaker.tide.actor.aws.ClassicLinkInstancesActor.{GetInstancesNeedingClassicLinkAttached, InstancesNeedingClassicLinkAttached}
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{GetPipeline, PipelineDetails}
 import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor.{ServerGroupComparableAttributes, GetServerGroupDiff}
 import com.netflix.spinnaker.tide.actor.comparison.{AttributeDiff, AttributeDiffActor}
@@ -54,6 +55,15 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
   def pipelineCluster = clusterSharding.shardRegion(PipelineActor.typeName)
   def serverGroupCluster = clusterSharding.shardRegion(ServerGroupActor.typeName)
   def cloudDriverCluster = clusterSharding.shardRegion(CloudDriverActor.typeName)
+  def classicLinkInstancesCluster = clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName)
+
+  @RequestMapping(value = Array("/classicLinkInstances/{account}/{region}"), method = Array(GET))
+  def getClassicLinkInstances(@PathVariable("account") account: String,
+                       @PathVariable("region") region: String): InstancesNeedingClassicLinkAttached = {
+    val event = GetInstancesNeedingClassicLinkAttached(AwsLocation(account, region))
+    val future = (classicLinkInstancesCluster ? event).mapTo[InstancesNeedingClassicLinkAttached]
+    Await.result(future, timeout.duration)
+  }
 
   @RequestMapping(value = Array("/securityGroup/{account}/{region}/{name}"), method = Array(GET))
   def getSecurityGroup(@PathVariable("account") account: String,

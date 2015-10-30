@@ -21,7 +21,7 @@ import com.netflix.spinnaker.tide.model.AwsApi._
 import com.netflix.spinnaker.tide.model.Front50Service.PipelineState
 
 case class AwsResourceProtocol[T <: AwsIdentity](awsReference: AwsReference[T], event: ResourceEvent)
-  extends AkkaClustered with ResourceEvent {
+  extends AkkaClustered {
   @JsonIgnore def akkaIdentifier = s"${awsReference.akkaIdentifier}"
 }
 
@@ -29,6 +29,7 @@ sealed trait ResourceEvent extends Serializable
 sealed trait SecurityGroupEvent extends ResourceEvent
 sealed trait LoadBalancerEvent extends ResourceEvent
 sealed trait ServerGroupEvent extends ResourceEvent
+sealed trait InstanceEvent extends ResourceEvent
 
 case class ClearLatestState() extends ResourceEvent
 
@@ -55,3 +56,4 @@ case class ServerGroupLatestState(autoScalingGroup: AutoScalingGroupState,
 case class ServerGroupDetails(awsReference: AwsReference[ServerGroupIdentity],
                               latestState: Option[ServerGroupLatestState]) extends ServerGroupEvent
 
+case class AttachClassicLinkVpc(vpcId: String, securityGroupIds: Seq[String]) extends InstanceEvent
