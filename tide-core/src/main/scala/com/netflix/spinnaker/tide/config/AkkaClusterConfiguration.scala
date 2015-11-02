@@ -22,6 +22,7 @@ import akka.actor.ActorSystem
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.config.OkHttpClientConfiguration
 import com.netflix.spinnaker.tide.actor.aws._
+import com.netflix.spinnaker.tide.actor.classiclink.{AttachClassicLinkActor, ClassicLinkInstancesActor}
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor
 import com.netflix.spinnaker.tide.actor.copy.{ServerGroupDeepCopyActor, PipelineDeepCopyActor, DependencyCopyActor}
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPoll
@@ -82,6 +83,7 @@ class AkkaClusterConfiguration {
     ServerGroupDeepCopyActor.startCluster(clusterSharding)
     PipelineDeepCopyActor.startCluster(clusterSharding)
     DependencyCopyActor.startCluster(clusterSharding)
+    AttachClassicLinkActor.startCluster(clusterSharding)
 
     TaskDirector.startCluster(clusterSharding)
     TaskActor.startCluster(clusterSharding)

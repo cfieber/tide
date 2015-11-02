@@ -68,6 +68,7 @@ class TaskActor extends PersistentActor with ActorLogging {
         updateState(taskComplete)
         parentTaskId.foreach(taskId => getShardCluster(TaskActor.typeName) ! ChildTaskComplete(taskId, event))
         getShardCluster(TaskDirector.typeName) ! event
+        getShardCluster(taskDescription.executionActorTypeName) ! event
       }
 
     case event: ChildTaskComplete =>

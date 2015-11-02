@@ -20,7 +20,9 @@ import akka.actor.ActorRef
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.WebModel.{PipelineVpcMigrateDefinition, DependencyCopyDefinition, VpcDefinition}
-import com.netflix.spinnaker.tide.actor.aws.ClassicLinkInstancesActor.{GetInstancesNeedingClassicLinkAttached, InstancesNeedingClassicLinkAttached}
+import com.netflix.spinnaker.tide.actor.classiclink.AttachClassicLinkActor.AttachClassicLinkTask
+import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
+import ClassicLinkInstancesActor.{GetInstancesNeedingClassicLinkAttached, InstancesNeedingClassicLinkAttached}
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{GetPipeline, PipelineDetails}
 import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor.{ServerGroupComparableAttributes, GetServerGroupDiff}
 import com.netflix.spinnaker.tide.actor.comparison.{AttributeDiff, AttributeDiffActor}
@@ -63,6 +65,19 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
     val event = GetInstancesNeedingClassicLinkAttached(AwsLocation(account, region))
     val future = (classicLinkInstancesCluster ? event).mapTo[InstancesNeedingClassicLinkAttached]
     Await.result(future, timeout.duration)
+  }
+
+  @ApiOperation(value = "Continuously attaches classic link VPC to instances in an account and region.",
+    notes = "There must be a classic linked VPC. The instances are in auto scaling groups in EC2 classic and do not have launch configs with an attached classic link VPC.")
+  @RequestMapping(value = Array("/classicLinkInstances/{account}/{region}/attachVpc"), method = Array(POST))
+  def attachClassicLink(@PathVariable("account") account: String,
+                          @PathVariable("region") region: String,
+                          @RequestParam(value = "batchCount", defaultValue = "100") batchCount: Integer,
+                          @RequestParam(value = "dryRun", defaultValue = "false") dryRun: Boolean) = {
+    val taskDescription = AttachClassicLinkTask(AwsLocation(account, region), batchCount, dryRun = dryRun)
+    val future = (taskDirector ? taskDescription).mapTo[ExecuteTask]
+    val task = Await.result(future, timeout.duration)
+    task.taskId
   }
 
   @RequestMapping(value = Array("/securityGroup/{account}/{region}/{name}"), method = Array(GET))
