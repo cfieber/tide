@@ -19,13 +19,14 @@ package com.netflix.spinnaker.tide.actor.polling
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.ContractActorImpl
+import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPoll, EddaPollingProtocol}
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.{LatestSecurityGroupIdToNameMappings, GetSecurityGroupIdToNameMappings}
 import com.netflix.spinnaker.tide.actor.service.EddaActor
 import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundSecurityGroups, RetrieveSecurityGroups}
 import com.netflix.spinnaker.tide.model._
 import AwsApi._
-import com.netflix.spinnaker.tide.actor.aws.{ClassicLinkInstancesActor, SecurityGroupActor}
+import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor
 
 class SecurityGroupPollingActor extends PollingActor {
 

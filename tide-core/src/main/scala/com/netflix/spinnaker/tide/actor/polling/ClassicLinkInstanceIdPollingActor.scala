@@ -2,7 +2,7 @@ package com.netflix.spinnaker.tide.actor.polling
 
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.tide.actor.aws.ClassicLinkInstancesActor
+import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPollingProtocol, EddaPoll}
 import com.netflix.spinnaker.tide.actor.polling.ClassicLinkInstanceIdPollingActor.LatestClassicLinkInstanceIds
 import com.netflix.spinnaker.tide.actor.service.EddaActor

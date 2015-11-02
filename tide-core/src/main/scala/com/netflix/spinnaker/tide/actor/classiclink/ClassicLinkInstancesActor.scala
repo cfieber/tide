@@ -1,8 +1,8 @@
-package com.netflix.spinnaker.tide.actor.aws
+package com.netflix.spinnaker.tide.actor.classiclink
 
-import akka.actor.{Props, Actor}
+import akka.actor.{Actor, Props}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
-import com.netflix.spinnaker.tide.actor.aws.ClassicLinkInstancesActor.{InstancesNeedingClassicLinkAttached, GetInstancesNeedingClassicLinkAttached}
+import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.{InstancesNeedingClassicLinkAttached, GetInstancesNeedingClassicLinkAttached}
 import com.netflix.spinnaker.tide.actor.polling.ClassicLinkInstanceIdPollingActor.LatestClassicLinkInstanceIds
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.LatestSecurityGroupIdToNameMappings
 import com.netflix.spinnaker.tide.actor.polling.ServerGroupPollingActor.NonclassicLinkedLaunchConfigEc2ClassicInstanceIds
