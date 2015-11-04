@@ -4,7 +4,7 @@ import akka.actor.{Props, Cancellable, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.TaskActorObject
-import com.netflix.spinnaker.tide.actor.classiclink.AttachClassicLinkActor.{ClearPreviouslyAttachedInstanceIds, AttachClassicLinkTask}
+import com.netflix.spinnaker.tide.actor.classiclink.AttachClassicLinkActor.AttachClassicLinkTask
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.{GetInstancesNeedingClassicLinkAttached, InstancesNeedingClassicLinkAttached}
 import com.netflix.spinnaker.tide.actor.service.CloudDriverActor
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
@@ -21,7 +21,6 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
   private implicit val dispatcher = context.dispatcher
   def scheduler = context.system.scheduler
   private var pollForUnattachedInstances: Option[Cancellable] = None
-  private var clearPreviouslyAttachedInstanceIds: Option[Cancellable] = None
 
   var task: AttachClassicLinkTask = _
   var taskId: String = _
@@ -45,8 +44,6 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
     val classicLinkInstancesCluster = clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName)
     val getInstances = GetInstancesNeedingClassicLinkAttached(task.location)
     pollForUnattachedInstances = Option(scheduler.schedule(0 seconds, 10 seconds, classicLinkInstancesCluster, getInstances))
-    clearPreviouslyAttachedInstanceIds = Option(scheduler.schedule(10 minutes, 10 minutes, classicLinkInstancesCluster,
-      ClearPreviouslyAttachedInstanceIds()))
   }
 
   override def receiveCommand: Receive = {
@@ -61,26 +58,23 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
 
     case event: InstancesNeedingClassicLinkAttached =>
       val newNonclassicLinkInstanceIds = event.nonclassicLinkInstanceIds.diff(previouslyAttachedInstanceIds)
-      val instanceIds = util.Random.shuffle(newNonclassicLinkInstanceIds) take task.batchCount
+      val instanceIdsToAttach = util.Random.shuffle(newNonclassicLinkInstanceIds) take task.batchCount
       val cloudDriver = clusterSharding.shardRegion(CloudDriverActor.typeName)
       val attachCommand = AttachClassicLinkVpc(event.classicLinkVpcId, event.classicLinkSecurityGroupIds)
-      sendTaskEvent(Log(taskId, s"Attaching $attachCommand to $instanceIds"))
-      previouslyAttachedInstanceIds ++= instanceIds
-      instanceIds.foreach { instanceId =>
-        if (!task.dryRun) {
-          val awsReference = AwsReference(task.location, InstanceIdentity(instanceId))
-          cloudDriver ! AwsResourceProtocol(awsReference, attachCommand)
+      if (instanceIdsToAttach.nonEmpty) {
+        sendTaskEvent(Log(taskId, s"Attaching $attachCommand to $instanceIdsToAttach"))
+        previouslyAttachedInstanceIds ++= instanceIdsToAttach
+        instanceIdsToAttach.foreach { instanceId =>
+          if (!task.dryRun) {
+            val awsReference = AwsReference(task.location, InstanceIdentity(instanceId))
+            cloudDriver ! AwsResourceProtocol(awsReference, attachCommand)
+          }
         }
       }
-
-    case event: ClearPreviouslyAttachedInstanceIds =>
-      previouslyAttachedInstanceIds = Nil
-
 
     case event: TaskComplete =>
       persist(event) { it =>
         pollForUnattachedInstances.foreach(_.cancel())
-        clearPreviouslyAttachedInstanceIds.foreach(_.cancel())
         if (!task.dryRun) {
           val logMessage = event match {
             case taskSuccess: TaskSuccess => "Task complete."
@@ -121,7 +115,5 @@ object AttachClassicLinkActor extends TaskActorObject {
     override def taskType: String = "AttachClassicLinkTask"
     override def executionActorTypeName: String = typeName
   }
-
-  case class ClearPreviouslyAttachedInstanceIds() extends AttachClassicLinkProtocol
 }
 
