@@ -10,7 +10,7 @@ import com.netflix.spinnaker.tide.model.AwsApi.{LaunchConfiguration, AwsLocation
 
 class LaunchConfigPollingActor extends PollingActor {
 
-  override def pollScheduler = new PollSchedulerActorImpl(context, SubnetPollingActor)
+  override def pollScheduler = new PollSchedulerActorImpl(context, LaunchConfigPollingActor)
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
 
