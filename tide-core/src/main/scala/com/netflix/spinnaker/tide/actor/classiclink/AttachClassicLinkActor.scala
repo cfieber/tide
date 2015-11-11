@@ -46,7 +46,7 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
     val getInstances = GetInstancesNeedingClassicLinkAttached(task.location)
     pollForUnattachedInstances = Option(scheduler.schedule(0 seconds, 10 seconds, classicLinkInstancesCluster, getInstances))
     val attachClassicLinkCluster = clusterSharding.shardRegion(AttachClassicLinkActor.typeName)
-    clearPreviouslyAttachedInstanceIds = Option(scheduler.schedule(1 minutes, 1 minutes, attachClassicLinkCluster,
+    clearPreviouslyAttachedInstanceIds = Option(scheduler.schedule(1 minutes, 1 minutes, self,
       ClearPreviouslyAttachedInstanceIds()))
 
   }
