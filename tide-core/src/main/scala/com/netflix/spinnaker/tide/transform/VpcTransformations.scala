@@ -18,13 +18,9 @@ package com.netflix.spinnaker.tide.transform
 
 import com.netflix.spinnaker.tide.model.AwsApi.{AwsReference, SecurityGroupIdentity, SecurityGroupState, IpPermission}
 
-
 class VpcTransformations {
   def getVpcTransformation(sourceVpcName: Option[String], targetVpcName: Option[String]): VpcTransformation = {
     (sourceVpcName, targetVpcName) match {
-      // TODO: This should clearly be configurable for handling other migrations.
-      case (Some(source), Some(target)) if source.equalsIgnoreCase("Main") && target.equalsIgnoreCase("vpc0") =>
-        new MainToVpc0Transformation()
       case other => new NoOpVpcTransformation()
     }
   }

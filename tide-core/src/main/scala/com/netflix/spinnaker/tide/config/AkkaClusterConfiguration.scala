@@ -22,6 +22,7 @@ import akka.actor.ActorSystem
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.config.OkHttpClientConfiguration
 import com.netflix.spinnaker.tide.actor.aws._
+import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.ClassicLinkSecurityGroupNames
 import com.netflix.spinnaker.tide.actor.classiclink.{AttachClassicLinkActor, ClassicLinkInstancesActor}
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor
 import com.netflix.spinnaker.tide.actor.copy.{ServerGroupDeepCopyActor, PipelineDeepCopyActor, DependencyCopyActor}
@@ -115,6 +116,9 @@ class AkkaClusterConfiguration {
         for (poller <- pollers) {
           clusterSharding.shardRegion(poller.typeName) ! EddaPoll(location)
         }
+        val classicLinkSecurityGroupNames: Seq[String] = classicLinkSettings.getSecurityGroups
+        clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! ClassicLinkSecurityGroupNames(location,
+          classicLinkSecurityGroupNames)
       }
     }
   }
@@ -131,11 +135,21 @@ class AkkaClusterConfiguration {
     new EddaSettings()
   }
 
+  @Bean
+  @ConfigurationProperties("classicLink")
+  def classicLinkSettings: ClassicLinkSettings = {
+    new ClassicLinkSettings()
+  }
+
 }
 
 class EddaSettings {
   @BeanProperty var urlTemplate: String = _
   @BeanProperty var accountToRegionsMapping: java.util.HashMap[String, java.util.List[String]] = _
+}
+
+class ClassicLinkSettings {
+  @BeanProperty var securityGroups: java.util.List[String] = _
 }
 
 object OkHttpClientConfigurationHolder {
