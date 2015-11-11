@@ -27,6 +27,7 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
   var taskId: String = _
 
   var previouslyAttachedInstanceIds: Seq[String] = Nil
+  var recentlyAttachedInstanceIds: Seq[String] = Nil
 
   val clusterSharding = ClusterSharding.get(context.system)
 
@@ -62,13 +63,17 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
       }
 
     case event: InstancesNeedingClassicLinkAttached =>
-      val newNonclassicLinkInstanceIds = event.nonclassicLinkInstanceIds.diff(previouslyAttachedInstanceIds)
+      val newNonclassicLinkInstanceIds = event.nonclassicLinkInstanceIds.diff(recentlyAttachedInstanceIds)
       val instanceIdsToAttach = util.Random.shuffle(newNonclassicLinkInstanceIds) take task.batchCount
       val cloudDriver = clusterSharding.shardRegion(CloudDriverActor.typeName)
       val attachCommand = AttachClassicLinkVpc(event.classicLinkVpcId, event.classicLinkSecurityGroupIds)
       if (instanceIdsToAttach.nonEmpty) {
-        sendTaskEvent(Log(taskId, s"Attaching $attachCommand to $instanceIdsToAttach"))
-        previouslyAttachedInstanceIds ++= instanceIdsToAttach
+        val newInstances = instanceIdsToAttach.toSet.diff(previouslyAttachedInstanceIds.toSet)
+        if (newInstances.nonEmpty) {
+          // Don't log every time we just retry "ghost" instances. It fills up the log with noise.
+          sendTaskEvent(Log(taskId, s"Attaching $attachCommand to $instanceIdsToAttach"))
+        }
+        recentlyAttachedInstanceIds ++= instanceIdsToAttach
         instanceIdsToAttach.foreach { instanceId =>
           if (!task.dryRun) {
             val awsReference = AwsReference(task.location, InstanceIdentity(instanceId))
@@ -78,7 +83,8 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
       }
 
     case event: ClearPreviouslyAttachedInstanceIds =>
-      previouslyAttachedInstanceIds = Nil
+      previouslyAttachedInstanceIds = recentlyAttachedInstanceIds
+      recentlyAttachedInstanceIds = Nil
 
     case event: TaskComplete =>
       persist(event) { it =>
