@@ -16,20 +16,19 @@
 
 package com.netflix.spinnaker.tide.config
 
-import com.netflix.akka.spring.AkkaConfiguration
+import akka.actor.ActorSystem
 import com.netflix.spinnaker.config.OkHttpClientConfiguration
 import com.netflix.spinnaker.tide.actor.service.CloudDriverActor.CloudDriverInit
 import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.{Autowired, Value}
-import org.springframework.context.annotation.{Bean, Configuration, Import, Primary}
+import org.springframework.beans.factory.annotation.{Qualifier, Autowired, Value}
+import org.springframework.context.annotation.{Bean, Configuration, Primary}
 import retrofit.client.OkClient
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
 @Configuration
-@Import(Array(classOf[AkkaConfiguration]))
 class ActorSystemConfiguration {
 
   @Autowired var okHttpClientConfiguration: OkHttpClientConfiguration = _
@@ -37,6 +36,14 @@ class ActorSystemConfiguration {
   @Value("${akka.cluster.port:2551}") var clusterPort: String = _
   @Value("${akka.actor.system.name:default}") var actorSystemName: String = _
   @Value("${cloudDriver.baseUrl}") var cloudDriverApiUrl: String = _
+
+
+  @Bean
+  def actorSystem(@Value("${akka.actor.system.name:default}") name: String,
+                  @Qualifier("akkaConfig") akkaConfig: Config): ActorSystem = {
+    val system = ActorSystem.create(name, akkaConfig.withFallback(ConfigFactory.load()))
+    system
+  }
 
   @Bean
   @Primary
