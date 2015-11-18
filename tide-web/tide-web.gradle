@@ -33,7 +33,6 @@ springBoot {
 
 dependencies {
   compile project(":tide-core")
-  compile spinnaker.dependency("groovy")
   compile spinnaker.dependency("korkWeb")
   spinnaker.group("bootWeb")
   spinnaker.group('test')
