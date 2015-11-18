@@ -38,10 +38,11 @@ import com.netflix.spinnaker.tide.actor.ClusterTestActor
 import com.netflix.spinnaker.tide.model.AwsApi._
 import org.springframework.beans.factory.annotation.{Value, Autowired}
 import org.springframework.boot.context.properties.ConfigurationProperties
-import org.springframework.context.annotation.{Bean, Configuration}
+import org.springframework.context.annotation.{DependsOn, Bean, Configuration}
 import scala.beans.BeanProperty
 import scala.collection.JavaConversions._
 
+@DependsOn(Array("awsServiceProviderFactory"))
 @Configuration
 class AkkaClusterConfiguration {
 

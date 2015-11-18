@@ -18,8 +18,7 @@ package com.netflix.spinnaker.tide.actor.service
 
 import akka.actor.Props
 import com.netflix.frigga.Names
-import com.netflix.spinnaker.config.OkHttpClientConfiguration
-import com.netflix.spinnaker.tide.actor.{ClusteredActorObject, SingletonActorObject}
+import com.netflix.spinnaker.tide.actor.SingletonActorObject
 import com.netflix.spinnaker.tide.model.AwsApi._
 import com.netflix.spinnaker.tide.model._
 import CloudDriverActor.{CloudDriverResponse, GetTaskDetail}
@@ -126,19 +125,14 @@ object ConstructCloudDriverOperations {
     val stack = cloneServerGroup.stack.getOrElse(names.getStack)
     val detail = cloneServerGroup.detail.getOrElse(names.getDetail)
 
-    val isInstanceMonitoringEnabled: Boolean = Option(launchConfiguration.instanceMonitoring) match {
-      case None => false
-      case Some(instanceMonitoring) => instanceMonitoring.enabled
-    }
-
     CloneServerGroupOperation(application, stack, detail,
       autoScalingGroup.subnetType, autoScalingGroup.vpcName, availabilityZones,
       awsLocation.account, launchConfiguration.securityGroups, autoScalingGroup.loadBalancerNames, capacity,
       launchConfiguration.iamInstanceProfile, launchConfiguration.keyName, launchConfiguration.imageId,
       launchConfiguration.instanceType, launchConfiguration.associatePublicIpAddress, launchConfiguration.ramdiskId,
-      autoScalingGroup.terminationPolicies, autoScalingGroup.suspendedProcesses.map(_.processName),
+      autoScalingGroup.terminationPolicies, autoScalingGroup.suspendedProcesses,
       launchConfiguration.spotPrice, autoScalingGroup.healthCheckType, autoScalingGroup.healthCheckGracePeriod,
-      autoScalingGroup.defaultCooldown, isInstanceMonitoringEnabled,
+      autoScalingGroup.defaultCooldown, launchConfiguration.isInstanceMonitoringEnabled,
       launchConfiguration.ebsOptimized, cloneServerGroup.startDisabled, Source.from(awsReference))
   }
 

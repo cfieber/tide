@@ -94,10 +94,8 @@ class ServerGroupPollingActor() extends PollingActor {
             val latestState = ServerGroupLatestState(normalizedAutoScalingGroupState, normalizedLaunchConfigurationState)
             clusterSharding.shardRegion(ServerGroupActor.typeName) ! AwsResourceProtocol(AwsReference(location,
               autoScalingGroup.identity), latestState)
-            if (launchConfiguration.state.classicLinkVPCId.isEmpty &&
-              autoScalingGroup.state.VPCZoneIdentifier.isEmpty &&
-              Option(autoScalingGroup.instances).isDefined) {
-              nonClassicLinkedLaunchConfigInstanceIds ++= autoScalingGroup.instances.map(_.instanceId)
+            if (launchConfiguration.state.classicLinkVPCId.isEmpty && autoScalingGroup.state.VPCZoneIdentifier.isEmpty) {
+              nonClassicLinkedLaunchConfigInstanceIds ++= autoScalingGroup.instanceIds
             }
           }
         }

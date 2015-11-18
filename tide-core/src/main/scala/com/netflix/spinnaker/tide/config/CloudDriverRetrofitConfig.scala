@@ -26,7 +26,7 @@ import retrofit.Endpoints._
 import retrofit.client.Client
 
 @Configuration
-class CloudDriverConfig {
+class CloudDriverRetrofitConfig {
 
   @Autowired var retrofitClient: Client = _
 

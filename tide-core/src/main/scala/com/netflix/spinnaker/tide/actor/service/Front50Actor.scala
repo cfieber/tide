@@ -17,9 +17,7 @@
 package com.netflix.spinnaker.tide.actor.service
 
 import akka.actor.Props
-import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.config.OkHttpClientConfiguration
-import com.netflix.spinnaker.tide.actor.{SingletonActorObject, ClusteredActorObject, ContractActorImpl}
+import com.netflix.spinnaker.tide.actor.SingletonActorObject
 import com.netflix.spinnaker.tide.actor.service.Front50Actor.{FoundPipelines, GetPipelines, AddPipelines}
 import com.netflix.spinnaker.tide.model.Front50Service
 import com.netflix.spinnaker.tide.model.Front50Service.{Pipeline, PipelineState}
