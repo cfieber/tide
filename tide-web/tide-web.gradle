@@ -1,3 +1,5 @@
+import org.springframework.boot.gradle.run.BootRunTask
+
 /*
  * Copyright 2015 Netflix, Inc.
  *
@@ -13,52 +15,100 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+apply plugin: 'spring-boot'
+apply plugin: 'nebula.ospackage'
 
-buildscript {
-    repositories {
-        jcenter()
-    }
-    dependencies {
-        classpath "com.netflix.nebula:gradle-ospackage-plugin:1.12.2"
-        classpath "org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}"
-    }
+ext {
+    springConfigLocation = System.getProperty('spring.config.location', "${System.getProperty('user.home')}/.spinnaker/")
 }
 
-apply plugin: 'os-package'
-apply plugin: 'spring-boot'
+tasks.withType(BootRunTask) {
+    systemProperty('spring.config.location', project.springConfigLocation)
+}
 
-springBoot {
-    mainClass = 'com.netflix.spinnaker.tide.Main'
+configurations.all {
+    exclude group: 'javax.servlet', module: 'servlet-api'
+    exclude group: "org.slf4j", module: "slf4j-log4j12"
 }
 
 dependencies {
-  compile project(":tide-core")
-  compile spinnaker.dependency("korkWeb")
-  spinnaker.group("bootWeb")
-  spinnaker.group('test')
-  compile spinnaker.dependency("korkSwagger")
+    compile project(":tide-core")
+    compile spinnaker.dependency("korkWeb")
+    compile spinnaker.dependency("korkSwagger")
 }
 
+tasks.bootRepackage.enabled = false
+
+applicationName = 'tide'
+applicationDefaultJvmArgs = ["-Djava.security.egd=file:/dev/./urandom"]
 applicationDistribution.from(project.file('config')) {
-  into "config"
+    into 'config'
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDir 'src/main/resources'
+            srcDir 'config'
+        }
+    }
+}
+
+jar {
+    doFirst {
+        exclude "${rootProject.name}.yml"
+    }
 }
 
 startScripts {
-  doLast {
-    unixScript.text = unixScript.text.replace('CLASSPATH=$APP_HOME', 'CLASSPATH=$APP_HOME/config:$APP_HOME')
-    windowsScript.text = windowsScript.text.replace('set CLASSPATH=', 'set CLASSPATH=%APP_HOME%\\config;')
-  }
+    defaultJvmOpts = applicationDefaultJvmArgs + ["-Dspring.config.location=/opt/spinnaker/config/"]
+    doLast {
+        unixScript.text = unixScript.text.replace('DEFAULT_JVM_OPTS=', '''\
+        if [ -f /etc/default/spinnaker ]; then
+          set -a
+          . /etc/default/spinnaker
+          set +a
+        fi
+        DEFAULT_JVM_OPTS='''.stripIndent())
+        unixScript.text = unixScript.text.replace('CLASSPATH=$APP_HOME', 'CLASSPATH=$APP_HOME/config:$APP_HOME')
+        windowsScript.text = windowsScript.text.replace('set CLASSPATH=', 'set CLASSPATH=%APP_HOME%\\config;')
+    }
+}
+
+String toVers(String v) {
+    int idx = v.indexOf('-')
+    if (idx != -1) {
+        return v.substring(0, idx)
+    }
+    return v
 }
 
 ospackage {
-  packageName = project.applicationName
-  version = project.version.replaceAll("-SNAPSHOT", "")
-  release '3'
-  into "/opt/${project.applicationName}"
-  from "${project.buildDir}/install/${project.applicationName}"
+    packageName = "spinnaker-" + project.applicationName
+    version = toVers(project.version.toString())
+    release '4'
+    into "/opt/${project.applicationName}"
+    from ("${project.buildDir}/install/${project.applicationName}")
+
+// installer scripts
+    postInstall = file('pkg_scripts/postInstall.sh')
+    postUninstall = file('pkg_scripts/postUninstall.sh')
+
+    from(file('etc/init/clouddriver.conf')) {
+        into('/etc/init')
+        user = 'root'
+        permissionGroup = 'root'
+        fileType = CONFIG | NOREPLACE
+    }
+
+    from(file('etc/logrotate.d/clouddriver')) {
+        into('/etc/logrotate.d')
+        user = 'root'
+        permissionGroup = 'root'
+        fileType = CONFIG | NOREPLACE
+    }
 }
 
 buildDeb {
-  dependsOn installApp
-  requires("openjdk-8-jre")
+    dependsOn installDist
 }
