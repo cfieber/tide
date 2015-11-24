@@ -16,39 +16,124 @@
 
 package com.netflix.spinnaker.tide.actor.service
 
-import akka.actor.Props
+import java.lang.Boolean
+
+import akka.actor.{ActorLogging, Props}
+import akka.persistence.{RecoveryCompleted, PersistentActor}
+import com.amazonaws.services.autoscaling.model.{DescribeLaunchConfigurationsRequest, DescribeAutoScalingGroupsRequest}
+import com.amazonaws.services.ec2.model.DescribeClassicLinkInstancesRequest
+import com.amazonaws.services.elasticloadbalancing.model.DescribeLoadBalancersRequest
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
-import com.netflix.spinnaker.tide.actor.service.EddaActor.{RetrieveSecurityGroups, RetrieveLoadBalancers, RetrieveLaunchConfigurations, RetrieveAutoScalingGroups, RetrieveSubnets, RetrieveVpcs, RetrieveClassicLinkInstanceIds, FoundSecurityGroups, FoundLoadBalancers, FoundLaunchConfigurations, FoundAutoScalingGroups, FoundSubnets, FoundVpcs, FoundClassicLinkInstanceIds}
-import com.netflix.spinnaker.tide.model.{AkkaClustered, AwsApi, EddaService}
+import com.netflix.spinnaker.tide.actor.service.EddaActor.{RetrieveSecurityGroups, RetrieveLoadBalancers, RetrieveLaunchConfigurations, RetrieveAutoScalingGroups, RetrieveSubnets, RetrieveVpcs, RetrieveClassicLinkInstanceIds, FoundSecurityGroups, FoundLoadBalancers, FoundLaunchConfigurations, FoundAutoScalingGroups, FoundSubnets, FoundVpcs, FoundClassicLinkInstanceIds, EddaInit}
+import com.netflix.spinnaker.tide.config.AwsConfig
+import com.netflix.spinnaker.tide.model._
 import AwsApi._
+import scala.collection.JavaConversions._
 
-class EddaActor extends RetrofitServiceActor[EddaService] {
+class EddaActor extends PersistentActor with ActorLogging {
 
-  override def operational: Receive = {
+  override def persistenceId: String = self.path.name
+
+  var awsServiceProvider: Option[AwsServiceProvider] = None
+
+  override def preRestart(reason: Throwable, message: Option[Any]) = {
+    reason.printStackTrace()
+    super.preRestart(reason, message)
+  }
+
+  override def receiveCommand: Receive = {
+    case msg: EddaInit =>
+      persist(msg) { it =>
+        updateState(it)
+        context become operational
+      }
+    case _ =>
+  }
+
+  def operational: Receive = {
     case msg: RetrieveSecurityGroups =>
-      sender ! FoundSecurityGroups(service.securityGroups)
+      val amazonEc2 = awsServiceProvider.get.getAmazonEC2
+      val securityGroups = amazonEc2.describeSecurityGroups.getSecurityGroups.map(AwsConversion.securityGroupFrom)
+      sender ! FoundSecurityGroups(securityGroups)
+
     case msg: RetrieveLoadBalancers =>
-      sender ! FoundLoadBalancers(service.loadBalancers)
+      val loadBalancing = awsServiceProvider.get.getAmazonElasticLoadBalancing
+      val loadBalancers = retrieveAll{ nextToken =>
+        val result = loadBalancing.describeLoadBalancers(new DescribeLoadBalancersRequest().withMarker(nextToken))
+        (result.getLoadBalancerDescriptions.map(AwsConversion.loadBalancerFrom), Option(result.getNextMarker))
+      }
+      sender ! FoundLoadBalancers(loadBalancers)
+
     case msg: RetrieveLaunchConfigurations =>
-      sender ! FoundLaunchConfigurations(service.launchConfigurations)
+      val autoScaling = awsServiceProvider.get.getAutoScaling
+      val launchConfigurations = retrieveAll{ nextToken =>
+        val result = autoScaling.describeLaunchConfigurations(new DescribeLaunchConfigurationsRequest().withNextToken(nextToken))
+        (result.getLaunchConfigurations.map(AwsConversion.launchConfigurationFrom), Option(result.getNextToken))
+      }
+      sender ! FoundLaunchConfigurations(launchConfigurations)
+
     case msg: RetrieveAutoScalingGroups =>
-      sender ! FoundAutoScalingGroups(service.autoScalingGroups)
+      val autoScaling = awsServiceProvider.get.getAutoScaling
+      val asgs = retrieveAll{ nextToken =>
+        val result = autoScaling.describeAutoScalingGroups(new DescribeAutoScalingGroupsRequest().withNextToken(nextToken))
+        (result.getAutoScalingGroups.map(AwsConversion.autoScalingGroupFrom), Option(result.getNextToken))
+      }
+      sender ! FoundAutoScalingGroups(asgs)
+
     case msg: RetrieveSubnets =>
-      sender ! FoundSubnets(service.subnets)
+      val amazonEc2 = awsServiceProvider.get.getAmazonEC2
+      val subnets = amazonEc2.describeSubnets().getSubnets.map(AwsConversion.subnetFrom)
+      sender ! FoundSubnets(subnets)
 
     case msg: RetrieveVpcs =>
-      val vpcs = service.vpcs
-      val vpcClassicLinkLookup: Map[String, Boolean] = service.vpcClassicLinks.map{ vpcClassicLink =>
-        vpcClassicLink.vpcId -> vpcClassicLink.classicLinkEnabled
+      val amazonEc2 = awsServiceProvider.get.getAmazonEC2
+      val vpcs = amazonEc2.describeVpcs().getVpcs
+      val vpcClassicLinks = amazonEc2.describeVpcClassicLink().getVpcs
+      val vpcClassicLinkLookup: Map[String, Boolean] = vpcClassicLinks.map { vpcClassicLink =>
+        vpcClassicLink.getVpcId -> vpcClassicLink.isClassicLinkEnabled
       }.toMap
       val combinedVpcAttributes = vpcs.map { vpc =>
-        vpc.copy(classicLinkEnabled = vpcClassicLinkLookup.getOrElse(vpc.vpcId, false))
+        val classicLinkEnabled: Boolean = vpcClassicLinkLookup.getOrElse(vpc.getVpcId, false)
+        AwsConversion.vpcFrom(vpc, classicLinkEnabled)
       }
       sender ! FoundVpcs(combinedVpcAttributes)
 
     case msg: RetrieveClassicLinkInstanceIds =>
-      val classicLinkInstanceIds = service.classicLinkInstanceIds
-      sender ! FoundClassicLinkInstanceIds(classicLinkInstanceIds)
+      val amazonEc2 = awsServiceProvider.get.getAmazonEC2
+      val instanceIds = retrieveAll{ nextToken =>
+        val result = amazonEc2.describeClassicLinkInstances(new DescribeClassicLinkInstancesRequest().withNextToken(nextToken))
+        (result.getInstances.map(_.getInstanceId), Option(result.getNextToken))
+      }
+      sender ! FoundClassicLinkInstanceIds(instanceIds)
+  }
+
+  def retrieveAll[T](retrieve: String => (Seq[T], Option[String])): Seq[T] = {
+    var currentToken: String = ""
+    var instanceIds: Seq[T] = Nil
+    do {
+      val (resources: Seq[T], nextToken: Option[String]) = retrieve(currentToken)
+      currentToken = nextToken.getOrElse("")
+      instanceIds ++= resources
+    } while (currentToken.nonEmpty)
+    instanceIds
+  }
+
+  override def receiveRecover: Receive = {
+    case RecoveryCompleted =>
+      awsServiceProvider match {
+        case Some(provider) =>
+          context become operational
+        case None =>
+      }
+    case msg => updateState(msg)
+  }
+
+  def updateState(event: Any) = {
+    event match {
+      case msg: EddaInit =>
+        awsServiceProvider = AwsConfig.awsServiceProviderFactory.getAwsServiceProvider(msg.location)
+      case _ =>
+    }
   }
 }
 
@@ -64,12 +149,7 @@ object EddaActor extends ClusteredActorObject {
   val props = Props[EddaActor]
 
   case class EddaInit(location: AwsLocation, eddaUrlTemplate: String, override val resourceType: Class[_])
-    extends EddaProtocolInput with RetrofitServiceInit[EddaService] {
-    override val url: String = eddaUrlTemplate
-      .replaceAll("%account", location.account)
-      .replaceAll("%region", location.region)
-    override val serviceType: Class[EddaService] = classOf[EddaService]
-  }
+    extends EddaProtocolInput
 
   case class RetrieveSecurityGroups(location: AwsLocation) extends EddaProtocolInput
   case class RetrieveLoadBalancers(location: AwsLocation) extends EddaProtocolInput

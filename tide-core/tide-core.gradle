@@ -5,12 +5,15 @@ configurations {
 dependencies {
   spinnaker.group("retrofitDefault")
 
-  compile(group: 'com.netflix.spinnaker.clouddriver', name: 'clouddriver-aws', version: '1.24.0', ext: 'jar')
+  compile 'com.netflix.spinnaker.clouddriver:clouddriver-core:1.30.0'
+  compile 'com.netflix.spinnaker.clouddriver:clouddriver-aws:1.30.0'
+  compile 'com.netflix.spinnaker.clouddriver:clouddriver-security:1.30.0'
+  spinnaker.group('amazon')
 
+  compile spinnaker.dependency("korkWeb")
   compile spinnaker.dependency("springContext")
   compile spinnaker.dependency("jacksonJsr310")
   compile 'org.springframework.boot:spring-boot:1.2.1.RELEASE'
-  compile spinnaker.dependency("korkWeb")
 
   testCompile 'junit:junit:4.12'
 }

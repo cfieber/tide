@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide.model
 import com.fasterxml.jackson.annotation.{JsonProperty, JsonIgnore, JsonUnwrapped}
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
-import com.netflix.spinnaker.tide.actor.task.TaskActor.{MutationDetails, Create}
+import com.netflix.spinnaker.tide.actor.task.TaskActor.MutationDetails
 
 sealed trait AwsProtocol extends Serializable
 
@@ -89,7 +89,7 @@ object AwsApi {
 
   case class AutoScalingGroup(@JsonUnwrapped @JsonProperty("identity") identity: AutoScalingGroupIdentity,
                               @JsonUnwrapped @JsonProperty("state") state: AutoScalingGroupState,
-                              instances: Seq[Instance]) extends AwsProtocol
+                              instanceIds: Seq[String]) extends AwsProtocol
 
   case class Tag(key: String, value: String)
 
@@ -129,8 +129,8 @@ object AwsApi {
     }
   }
 
-  case class IpPermission(fromPort: Int,
-                          toPort: Int,
+  case class IpPermission(fromPort: Option[Int],
+                          toPort: Option[Int],
                           ipProtocol: String,
                           ipRanges: Set[String],
                           userIdGroupPairs: Set[UserIdGroupPairs])
@@ -174,7 +174,7 @@ object AwsApi {
     }
   }
 
-  case class LoadBalancerState(createdTime: Long, @JsonProperty("VPCId") vpcId: Option[String],
+  case class LoadBalancerState(@JsonProperty("VPCId") vpcId: Option[String],
                                availabilityZones: Set[String],
                                healthCheck: HealthCheck, listenerDescriptions: Set[ListenerDescription],
                                scheme: String, securityGroups: Set[String],
@@ -200,7 +200,7 @@ object AwsApi {
       val loadBalancerState: Option[LoadBalancerState] = subnets.headOption.flatMap { subnetId =>
         val subnetOption = subnetDetails.find(_.subnetId == subnetId)
         subnetOption.map { subnet =>
-          copy(subnetType = Option(subnet.subnetType), vpcId = Option(subnet.vpcId))
+          copy(subnetType = Option(subnet.name), vpcId = Option(subnet.vpcId))
         }
       }
       loadBalancerState match {
@@ -223,10 +223,9 @@ object AwsApi {
     @JsonIgnore def akkaIdentifier: String = s"LaunchConfiguration.$launchConfigurationName"
   }
 
-  case class LaunchConfigurationState(createdTime: Long,
-                                      associatePublicIpAddress: Option[Boolean],
+  case class LaunchConfigurationState(associatePublicIpAddress: Option[Boolean],
                                       ebsOptimized: Boolean, iamInstanceProfile: String, imageId: String,
-                                      instanceMonitoring: InstanceMonitoring, instanceType: String, kernelId: String,
+                                      isInstanceMonitoringEnabled: Boolean, instanceType: String, kernelId: String,
                                       keyName: String, ramdiskId: String,
                                       securityGroups: Set[String], spotPrice: Option[String],
                                       classicLinkVPCId: Option[String]) extends AwsProtocol {
@@ -255,20 +254,21 @@ object AwsApi {
     @JsonIgnore def akkaIdentifier: String = s"Instance.$instanceId"
   }
 
-  case class AutoScalingGroupState(createdTime: Long,
-                                   VPCZoneIdentifier: String,
+  case class AutoScalingGroupState(VPCZoneIdentifier: String,
                                    launchConfigurationName: String,
                                    availabilityZones: Set[String],
                                    defaultCooldown: Int, desiredCapacity: Int, healthCheckGracePeriod: Int,
                                    healthCheckType: String, loadBalancerNames: Set[String],
-                                   maxSize: Int, minSize: Int, suspendedProcesses: Set[SuspendedProcess],
+                                   maxSize: Int, minSize: Int, suspendedProcesses: Set[String],
                                    terminationPolicies: Set[String],
                                    subnetType: Option[String], vpcName: Option[String]) extends AwsProtocol {
     def forVpc(sourceVpcName: Option[String], targetVpcName: Option[String]): AutoScalingGroupState = {
       val newLoadBalancerNames = loadBalancerNames.map(LoadBalancerIdentity(_).
         forVpc(sourceVpcName, targetVpcName).loadBalancerName)
       this.copy(loadBalancerNames = newLoadBalancerNames, vpcName = targetVpcName,
-        subnetType = constructTargetSubnetType(subnetType, targetVpcName))
+        subnetType = constructTargetSubnetType(subnetType, targetVpcName),
+        VPCZoneIdentifier = ""
+      )
     }
 
     def withCapacity(size: Int): AutoScalingGroupState = {
@@ -282,7 +282,7 @@ object AwsApi {
         subnetOption.flatMap { subnet =>
           val vpcOption = vpcs.find(_.vpcId == subnet.vpcId)
           vpcOption.map { vpc =>
-            copy(subnetType = Option(subnet.subnetType), vpcName = vpc.name)
+            copy(subnetType = Option(subnet.name), vpcName = vpc.name)
           }
         }
       }
@@ -293,41 +293,9 @@ object AwsApi {
     }
   }
 
-  case class SuspendedProcess(processName: String, suspensionReason: String)
+  case class Subnet(subnetId: String, vpcId: String, name: String) extends AwsProtocol
 
-  case class Subnet(subnetId: String, vpcId: String,
-                    availabilityZone: String, availableIpAddressCount: Int, cidrBlock: String, defaultForAz: Boolean,
-                    mapPublicIpOnLaunch: Boolean, state: String, tags: Seq[Tag]) extends AwsProtocol {
-    private val objectMapper = new ObjectMapper()
-    private val immutableMetadataKey = "immutable_metadata"
-    private val nameKey = "Name"
-    private val purposeKey = "purpose"
-
-    def subnetType: String = {
-      tags.find(tag => nameKey.equalsIgnoreCase(tag.key)) match {
-        case Some(subnetNameTag) =>
-          val subnetName = subnetNameTag.value
-          val parts = subnetName.split("\\.")
-          s"${parts(1)} (${parts(0)})"
-        case None =>
-          tags.find(_.key == immutableMetadataKey) match {
-            case Some(immutable_metadata) =>
-              val keyValue = objectMapper.convertValue(immutable_metadata.value, classOf[Map[String, String]])
-              keyValue(purposeKey)
-            case None => ""
-          }
-      }
-    }
-  }
-
-  case class Vpc(vpcId: String,
-                 cidrBlock: String, dhcpOptionsId: String, instanceTenancy: String, isDefault: Boolean, state: String,
-                 tags: Seq[Tag], classicLinkEnabled: Boolean) extends AwsProtocol {
-    def name: Option[String] = {
-      val nameTagOption: Option[Tag] = tags.find(_.key == "Name")
-      nameTagOption.map(_.value)
-    }
-  }
+  case class Vpc(vpcId: String, name: Option[String], classicLinkEnabled: Boolean) extends AwsProtocol
 
   case class VpcClassicLink(vpcId: String, classicLinkEnabled: Boolean)
 
