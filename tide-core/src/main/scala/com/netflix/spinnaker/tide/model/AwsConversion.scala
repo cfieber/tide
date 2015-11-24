@@ -42,8 +42,15 @@ object AwsConversion {
 
   def autoScalingGroupFrom(awsAsg: awsAutoScaling.AutoScalingGroup): AutoScalingGroup = {
 
-    val instanceIds = if (Option(awsAsg.getInstances).isDefined) {
-      awsAsg.getInstances.map(_.getInstanceId)
+    val instances = if (Option(awsAsg.getInstances).isDefined) {
+      awsAsg.getInstances.map( instance =>
+        Instance(
+          instanceId = instance.getInstanceId,
+          lifecycleState = instance.getLifecycleState,
+          healthStatus = instance.getHealthStatus,
+          launchConfigurationName = instance.getLaunchConfigurationName
+        )
+      )
     } else Nil
 
     AutoScalingGroup(
@@ -64,7 +71,7 @@ object AwsConversion {
         subnetType = None,
         vpcName = None
       ),
-      instanceIds = instanceIds
+      instances = instances
     )
   }
 

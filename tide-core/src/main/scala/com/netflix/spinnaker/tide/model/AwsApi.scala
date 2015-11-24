@@ -89,7 +89,7 @@ object AwsApi {
 
   case class AutoScalingGroup(@JsonUnwrapped @JsonProperty("identity") identity: AutoScalingGroupIdentity,
                               @JsonUnwrapped @JsonProperty("state") state: AutoScalingGroupState,
-                              instanceIds: Seq[String]) extends AwsProtocol
+                              instances: Seq[Instance]) extends AwsProtocol
 
   case class Tag(key: String, value: String)
 
@@ -299,5 +299,5 @@ object AwsApi {
 
   case class VpcClassicLink(vpcId: String, classicLinkEnabled: Boolean)
 
-  case class Instance(instanceId: String)
+  case class Instance(instanceId: String, lifecycleState: String, healthStatus: String, launchConfigurationName: String)
 }
