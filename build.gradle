@@ -20,7 +20,8 @@ buildscript {
   }
   repositories {
     jcenter()
-    maven { url "http://dl.bintray.com/spinnaker/gradle" }
+    maven { url "http://spinnaker.bintray.com/gradle" }
+    maven { url "http://dl.bintray.com/ssongvan/maven" }
   }
   dependencies {
     classpath "com.netflix.spinnaker.gradle:spinnaker-gradle-project:3.1.0"
@@ -74,7 +75,7 @@ allprojects {
   ext {
     versions = [
       scala  : "2.11",
-      akka   : "2.3.9",
+      akka   : "2.3.14",
       scalaTest: "2.2.4"
     ]
   }
@@ -89,6 +90,7 @@ allprojects {
     compile "com.squareup.okhttp:okhttp:2.4.0"
     compile 'com.netflix.frigga:frigga:0.13'
     compile "com.github.romix.akka:akka-kryo-serialization_$versions.scala:0.3.3"
+    compile "com.hootsuite:akka-persistence-redis_$versions.scala:0.2.0"
 
     testCompile "org.scala-lang.modules:scala-xml_$versions.scala:1.0.1"
     testCompile "org.scalatest:scalatest_$versions.scala:$versions.scalaTest"
