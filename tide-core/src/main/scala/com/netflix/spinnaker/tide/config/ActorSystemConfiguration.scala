@@ -36,7 +36,8 @@ class ActorSystemConfiguration {
   @Value("${akka.cluster.port:2551}") var clusterPort: String = _
   @Value("${akka.actor.system.name:default}") var actorSystemName: String = _
   @Value("${cloudDriver.baseUrl}") var cloudDriverApiUrl: String = _
-
+  @Value("${redis.host}") var redisHost: String = _
+  @Value("${redis.port}") var redisPort: Int = _
 
   @Bean
   def actorSystem(@Value("${akka.actor.system.name:default}") name: String,
@@ -49,6 +50,8 @@ class ActorSystemConfiguration {
   @Primary
   def akkaConfig(): Config = {
     var config: Config = ConfigFactory.empty()
+      .withValue("redis.host", ConfigValueFactory.fromAnyRef(redisHost))
+      .withValue("redis.port", ConfigValueFactory.fromAnyRef(redisPort))
       .withValue("akka.remote.netty.tcp.port", ConfigValueFactory.fromAnyRef(clusterPort))
 
     config = sys.env.get("NETFLIX_CLUSTER") match {
@@ -76,7 +79,7 @@ class ActorSystemConfiguration {
     }
 
     config = config withFallback ConfigFactory.load()
-    println(s"***** Akka config: $config")
+    log.info(s"***** Akka config: $config")
     config
   }
 
