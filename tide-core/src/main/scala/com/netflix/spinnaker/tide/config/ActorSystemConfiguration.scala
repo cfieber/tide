@@ -23,6 +23,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigValueFactory}
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.{Qualifier, Autowired, Value}
 import org.springframework.context.annotation.{Bean, Configuration, Primary}
+import retrofit.RetrofitError
 import retrofit.client.OkClient
 
 import scala.collection.JavaConversions._
@@ -49,35 +50,33 @@ class ActorSystemConfiguration {
   @Bean
   @Primary
   def akkaConfig(): Config = {
-    var config: Config = ConfigFactory.empty()
-      .withValue("redis.host", ConfigValueFactory.fromAnyRef(redisHost))
-      .withValue("redis.port", ConfigValueFactory.fromAnyRef(redisPort))
-      .withValue("akka.remote.netty.tcp.port", ConfigValueFactory.fromAnyRef(clusterPort))
-
-    config = sys.env.get("NETFLIX_CLUSTER") match {
-      case Some(currentCluster) =>
-        val currentIp = sys.env("EC2_LOCAL_IPV4")
+    var currentIp = "127.0.0.1"
+    var seeds: Seq[String] = List(s"akka.tcp://$actorSystemName@$currentIp:$clusterPort")
+    val netflixCluster: Option[String] = sys.env.get("NETFLIX_CLUSTER")
+    netflixCluster.foreach { currentCluster =>
+        currentIp = sys.env("EC2_LOCAL_IPV4")
         val currentApp = sys.env("NETFLIX_APP")
         val currentAccount = sys.env("NETFLIX_ENVIRONMENT")
         val okClient = new OkClient(okHttpClientConfiguration.create())
         val cloudDriverService = CloudDriverInit(cloudDriverApiUrl).constructService(okClient)
-        val clusterDetail = cloudDriverService.getClusterDetail(currentApp, currentAccount, currentCluster).get(0)
-        val serverGroups = clusterDetail.serverGroups
-        val seeds: Seq[String] = if (serverGroups.nonEmpty) {
-          val allInstancesInCluster = serverGroups.flatMap(_.instances)
-          allInstancesInCluster map (instance => s"akka.tcp://$actorSystemName@${instance.privateIpAddress}:$clusterPort")
-        } else {
-          Nil
+        try {
+          val clusterDetail = cloudDriverService.getClusterDetail(currentApp, currentAccount, currentCluster).get(0)
+          if (clusterDetail.serverGroups.nonEmpty) {
+            val allInstancesInCluster = clusterDetail.serverGroups.flatMap(_.instances)
+            seeds = allInstancesInCluster map(instance => s"akka.tcp://$actorSystemName@${instance.privateIpAddress}:$clusterPort")
+          }
+        } catch {
+          case e: RetrofitError =>
+            log.info(e.getMessage)
         }
-        config
-          .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(currentIp))
-          .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seeds.asJava))
-      case None =>
-        config
-          .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef("127.0.0.1"))
-          .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(List("akka.tcp://default@127.0.0.1:2551")))
     }
-
+    var config: Config = ConfigFactory.empty()
+      .withValue("redis.host", ConfigValueFactory.fromAnyRef(redisHost))
+      .withValue("redis.port", ConfigValueFactory.fromAnyRef(redisPort))
+      .withValue("akka.remote.netty.tcp.port", ConfigValueFactory.fromAnyRef(clusterPort))
+      .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(currentIp))
+      .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seeds.asJava))
+    log.info(s"***** Akka remote config: $config")
     config = config withFallback ConfigFactory.load()
     log.info(s"***** Akka config: $config")
     config
