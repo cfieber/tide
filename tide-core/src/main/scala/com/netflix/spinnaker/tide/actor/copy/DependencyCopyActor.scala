@@ -69,8 +69,8 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case latestVpcs: LatestVpcs =>
-      val sourceVpcId = findVpcId(task.source.vpcName, latestVpcs.resources)
-      val targetVpcId = findVpcId(task.target.vpcName, latestVpcs.resources)
+      val sourceVpcId = findVpcId(task.source.vpcName, latestVpcs.vpcs)
+      val targetVpcId = findVpcId(task.target.vpcName, latestVpcs.vpcs)
       persist(VpcIds(sourceVpcId, targetVpcId)) { it =>
         updateState(it)
         checkForCreatedResources = scheduler.schedule(25 seconds, 25 seconds, self, CheckCompletion())

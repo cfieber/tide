@@ -18,6 +18,9 @@ package com.netflix.spinnaker.tide.actor.polling
 
 import akka.actor.{Actor, ActorLogging}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
+import com.netflix.spinnaker.tide.config.AwsConfig
+import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
+import com.netflix.spinnaker.tide.model.AwsServiceProvider
 
 trait PollingActor extends Actor with ActorLogging {
 
@@ -26,6 +29,21 @@ trait PollingActor extends Actor with ActorLogging {
   override def preRestart(reason: Throwable, message: Option[Any]) = {
     reason.printStackTrace()
     super.preRestart(reason, message)
+  }
+
+  def getAwsServiceProvider(location: AwsLocation): AwsServiceProvider = {
+    AwsConfig.awsServiceProviderFactory.getAwsServiceProvider(location).get
+  }
+
+  def retrieveAll[T](retrieve: String => (Seq[T], Option[String])): Seq[T] = {
+    var currentToken: String = ""
+    var instanceIds: Seq[T] = Nil
+    do {
+      val (resources: Seq[T], nextToken: Option[String]) = retrieve(currentToken)
+      currentToken = nextToken.getOrElse("")
+      instanceIds ++= resources
+    } while (currentToken.nonEmpty)
+    instanceIds
   }
 
 }

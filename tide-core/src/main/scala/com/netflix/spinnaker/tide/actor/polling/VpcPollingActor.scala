@@ -18,14 +18,14 @@ package com.netflix.spinnaker.tide.actor.polling
 
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.tide.actor.ContractActorImpl
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPoll, EddaPollingProtocol}
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.{LatestVpcs, GetVpcs}
-import com.netflix.spinnaker.tide.actor.service.EddaActor
-import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundVpcs, RetrieveSecurityGroups, RetrieveVpcs}
-import com.netflix.spinnaker.tide.model.{AkkaClustered, AwsApi}
+import com.netflix.spinnaker.tide.model.{AwsConversion, AkkaClustered, AwsApi}
 import AwsApi._
+import scala.collection.JavaConversions._
+import scala.concurrent.Future
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class VpcPollingActor extends PollingActor {
 
@@ -35,24 +35,41 @@ class VpcPollingActor extends PollingActor {
 
   var location: AwsLocation = _
   var vpcs: Seq[Vpc] = _
+  var subnets: Seq[Subnet] = _
 
   override def receive: Receive = {
     case msg: GetVpcs =>
       if (Option(vpcs).isDefined) {
-        sender() ! LatestVpcs(msg.location, vpcs)
+        sender() ! LatestVpcs(msg.location, vpcs, subnets)
       }
 
     case msg: EddaPoll =>
       location = msg.location
       pollScheduler.scheduleNextPoll(msg)
-      clusterSharding.shardRegion(EddaActor.typeName) ! RetrieveVpcs(location)
+      val amazonEc2 = getAwsServiceProvider(location).getAmazonEC2
 
-    case msg: FoundVpcs =>
-      vpcs = msg.resources
-      val latestVpcs = LatestVpcs(location, vpcs)
-      clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! latestVpcs
-      clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! latestVpcs
-      clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! latestVpcs
+      val subnetsFuture = Future { amazonEc2.describeSubnets().getSubnets.map(AwsConversion.subnetFrom) }
+      val vpcsFuture = Future { amazonEc2.describeVpcs().getVpcs }
+      val vpcClassicLinkLookupFuture = Future {
+        amazonEc2.describeVpcClassicLink().getVpcs.map { vpcClassicLink =>
+          vpcClassicLink.getVpcId -> vpcClassicLink.isClassicLinkEnabled.booleanValue()
+        }.toMap
+      }
+
+      for {
+        subnets <- subnetsFuture
+        vpcs <- vpcsFuture
+        vpcClassicLinkLookup <- vpcClassicLinkLookupFuture
+      } {
+        val combinedVpcAttributes = vpcs.map { vpc =>
+          val classicLinkEnabled: Boolean = vpcClassicLinkLookup.getOrElse(vpc.getVpcId, false)
+          AwsConversion.vpcFrom(vpc, classicLinkEnabled)
+        }
+        val latestVpcs = LatestVpcs(location, combinedVpcAttributes, subnets)
+        clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! latestVpcs
+        clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! latestVpcs
+        clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! latestVpcs
+      }
   }
 
 }
@@ -61,7 +78,8 @@ object VpcPollingActor extends PollingActorObject {
   val props = Props[VpcPollingActor]
 
   case class GetVpcs(location: AwsLocation) extends EddaPollingProtocol
-  case class LatestVpcs(location: AwsLocation, resources: Seq[Vpc]) extends EddaPollingProtocol with AkkaClustered {
+  case class LatestVpcs(location: AwsLocation, vpcs: Seq[Vpc], subnets: Seq[Subnet]) extends EddaPollingProtocol with AkkaClustered {
     override def akkaIdentifier: String = location.akkaIdentifier
   }
+
 }

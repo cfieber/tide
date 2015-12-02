@@ -29,10 +29,9 @@ import com.netflix.spinnaker.tide.actor.copy.{ServerGroupDeepCopyActor, Pipeline
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPoll
 import com.netflix.spinnaker.tide.actor.polling.PipelinePollingActor.PipelinePoll
 import com.netflix.spinnaker.tide.actor.polling._
+import com.netflix.spinnaker.tide.actor.service.{Front50Actor, CloudDriverActor}
 import com.netflix.spinnaker.tide.actor.service.CloudDriverActor.CloudDriverInit
-import com.netflix.spinnaker.tide.actor.service.EddaActor._
 import com.netflix.spinnaker.tide.actor.service.Front50Actor.Front50Init
-import com.netflix.spinnaker.tide.actor.service.{Front50Actor, EddaActor, CloudDriverActor}
 import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector}
 import com.netflix.spinnaker.tide.actor.ClusterTestActor
 import com.netflix.spinnaker.tide.model.AwsApi._
@@ -63,7 +62,6 @@ class AkkaClusterConfiguration {
   def startClusters() = {
     ClusterTestActor.startCluster(clusterSharding)
 
-    EddaActor.startCluster(clusterSharding)
     CloudDriverActor.startCluster(clusterSharding)
     Front50Actor.startCluster(clusterSharding)
 
@@ -74,11 +72,9 @@ class AkkaClusterConfiguration {
     PipelineActor.startCluster(clusterSharding)
 
     VpcPollingActor.startCluster(clusterSharding)
-    SubnetPollingActor.startCluster(clusterSharding)
     SecurityGroupPollingActor.startCluster(clusterSharding)
     LoadBalancerPollingActor.startCluster(clusterSharding)
     ServerGroupPollingActor.startCluster(clusterSharding)
-    LaunchConfigPollingActor.startCluster(clusterSharding)
     PipelinePollingActor.startCluster(clusterSharding)
     ClassicLinkInstanceIdPollingActor.startCluster(clusterSharding)
 
@@ -100,20 +96,13 @@ class AkkaClusterConfiguration {
 
     clusterSharding.shardRegion(PipelinePollingActor.typeName) ! PipelinePoll()
 
-    val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, SubnetPollingActor, ClassicLinkInstanceIdPollingActor,
-      SecurityGroupPollingActor, LoadBalancerPollingActor, LaunchConfigPollingActor, ServerGroupPollingActor)
-    val resourceTypes: List[Class[_]] =List(classOf[RetrieveSecurityGroups], classOf[RetrieveLoadBalancers],
-      classOf[RetrieveLaunchConfigurations], classOf[RetrieveAutoScalingGroups], classOf[RetrieveSubnets],
-      classOf[RetrieveVpcs], classOf[RetrieveClassicLinkInstanceIds])
+    val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, ClassicLinkInstanceIdPollingActor,
+      SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
     val accounts = eddaSettings.getAccountToRegionsMapping.keySet()
     for (account <- accounts) {
       val regions: java.util.List[String] = eddaSettings.getAccountToRegionsMapping.get(account)
       for (region <- regions) {
         val location = AwsLocation(account, region)
-        for (resourceType <- resourceTypes) {
-          clusterSharding.shardRegion(EddaActor.typeName) ! EddaInit(location, eddaSettings.getUrlTemplate,
-            resourceType)
-        }
         for (poller <- pollers) {
           clusterSharding.shardRegion(poller.typeName) ! EddaPoll(location)
         }

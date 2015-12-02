@@ -18,64 +18,59 @@ package com.netflix.spinnaker.tide.actor.polling
 
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
+import com.amazonaws.services.elasticloadbalancing.model.DescribeLoadBalancersRequest
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPoll
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.LatestSecurityGroupIdToNameMappings
-import com.netflix.spinnaker.tide.actor.polling.SubnetPollingActor.LatestSubnets
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.LatestVpcs
-import com.netflix.spinnaker.tide.actor.service.EddaActor
-import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundLoadBalancers, RetrieveLoadBalancers}
-import com.netflix.spinnaker.tide.model.{ClearLatestState, AwsResourceProtocol, LoadBalancerLatestState, AwsApi}
+import com.netflix.spinnaker.tide.model._
 import AwsApi._
 import com.netflix.spinnaker.tide.actor.aws._
+import scala.collection.JavaConversions._
 
 class LoadBalancerPollingActor() extends PollingActor {
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
   override def pollScheduler = new PollSchedulerActorImpl(context, LoadBalancerPollingActor)
 
-  var location: AwsLocation = _
-  var latestSecurityGroups: LatestSecurityGroupIdToNameMappings = _
-  var latestVpcs: LatestVpcs = _
-  var latestSubnets: LatestSubnets = _
+  var latestSecurityGroups: Option[LatestSecurityGroupIdToNameMappings] = None
+  var latestVpcs: Option[LatestVpcs] = None
 
   var currentIds: Seq[LoadBalancerIdentity] = Nil
 
   override def receive: Receive = {
     case msg: LatestSecurityGroupIdToNameMappings =>
-      latestSecurityGroups = msg
+      latestSecurityGroups = Option(msg)
 
     case msg: LatestVpcs =>
-      latestVpcs = msg
-
-    case msg: LatestSubnets =>
-      latestSubnets = msg
+      latestVpcs = Option(msg)
 
     case msg: EddaPoll =>
-      location = msg.location
+      val location = msg.location
       pollScheduler.scheduleNextPoll(msg)
-      clusterSharding.shardRegion(EddaActor.typeName) ! RetrieveLoadBalancers(location)
+      (latestSecurityGroups, latestVpcs) match {
+        case (Some(LatestSecurityGroupIdToNameMappings(_, securityGroupIdToName)), Some(LatestVpcs(_, vpcs, subnets))) =>
+          val loadBalancing = getAwsServiceProvider(location).getAmazonElasticLoadBalancing
+          val loadBalancers = retrieveAll{ nextToken =>
+            val result = loadBalancing.describeLoadBalancers(new DescribeLoadBalancersRequest().withMarker(nextToken))
+            (result.getLoadBalancerDescriptions.map(AwsConversion.loadBalancerFrom), Option(result.getNextMarker))
+          }
 
-    case msg: FoundLoadBalancers =>
-      if (Option(latestSecurityGroups).isDefined
-        && Option(latestVpcs).isDefined
-        && Option(latestSubnets).isDefined) {
-        val loadBalancers = msg.resources
+          val oldIds = currentIds
+          currentIds = loadBalancers.map(_.identity)
+          val removedIds = oldIds.toSet -- currentIds.toSet
+          removedIds.foreach { identity =>
+            val reference = AwsReference(location, identity)
+            clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, ClearLatestState())
+          }
 
-        val oldIds = currentIds
-        currentIds = loadBalancers.map(_.identity)
-        val removedIds = oldIds.toSet -- currentIds.toSet
-        removedIds.foreach { identity =>
-          val reference = AwsReference(location, identity)
-          clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, ClearLatestState())
-        }
-
-        loadBalancers.foreach { loadBalancer =>
-          var normalizedState = loadBalancer.state.convertToSecurityGroupNames(latestSecurityGroups.map).
-            populateVpcAttributes(latestVpcs.resources, latestSubnets.resources)
-          val reference = AwsReference(location, loadBalancer.identity)
-          val latestState = LoadBalancerLatestState(normalizedState)
-          clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, latestState)
-        }
+          loadBalancers.foreach { loadBalancer =>
+            var normalizedState = loadBalancer.state.convertToSecurityGroupNames(securityGroupIdToName).
+              populateVpcAttributes(vpcs, subnets)
+            val reference = AwsReference(location, loadBalancer.identity)
+            val latestState = LoadBalancerLatestState(normalizedState)
+            clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, latestState)
+          }
+        case _ =>
       }
   }
 }
