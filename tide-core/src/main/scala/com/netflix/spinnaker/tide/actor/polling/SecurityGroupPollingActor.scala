@@ -22,11 +22,10 @@ import com.netflix.spinnaker.tide.actor.ContractActorImpl
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPoll, EddaPollingProtocol}
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.{LatestSecurityGroupIdToNameMappings, GetSecurityGroupIdToNameMappings}
-import com.netflix.spinnaker.tide.actor.service.EddaActor
-import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundSecurityGroups, RetrieveSecurityGroups}
 import com.netflix.spinnaker.tide.model._
 import AwsApi._
 import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor
+import scala.collection.JavaConversions._
 
 class SecurityGroupPollingActor extends PollingActor {
 
@@ -34,7 +33,6 @@ class SecurityGroupPollingActor extends PollingActor {
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
 
-  var location: AwsLocation = _
   var securityGroupIdToName: Map[String, SecurityGroupIdentity] = _
 
   var currentIds: Seq[SecurityGroupIdentity] = Nil
@@ -46,12 +44,10 @@ class SecurityGroupPollingActor extends PollingActor {
       }
 
     case msg: EddaPoll =>
-      location = msg.location
+      val location = msg.location
       pollScheduler.scheduleNextPoll(msg)
-      clusterSharding.shardRegion(EddaActor.typeName) ! RetrieveSecurityGroups(location)
-
-    case msg: FoundSecurityGroups =>
-      val securityGroups = msg.resources
+      val amazonEc2 = getAwsServiceProvider(location).getAmazonEC2
+      val securityGroups = amazonEc2.describeSecurityGroups.getSecurityGroups.map(AwsConversion.securityGroupFrom)
 
       val oldIds = currentIds
       currentIds = securityGroups.map(_.identity)

@@ -22,7 +22,7 @@ class ClassicLinkInstancesActor extends Actor {
     case ClassicLinkSecurityGroupNames(_, names) =>
       classicLinkSecurityGroupNames = names
 
-    case LatestVpcs(_, vpcs) =>
+    case LatestVpcs(_, vpcs, _) =>
       classicLinkVpcId = vpcs.find(_.classicLinkEnabled).map(_.vpcId)
 
     case LatestSecurityGroupIdToNameMappings(_, securityGroupIdToName) =>

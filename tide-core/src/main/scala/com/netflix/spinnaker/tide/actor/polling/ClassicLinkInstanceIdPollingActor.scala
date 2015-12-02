@@ -2,13 +2,13 @@ package com.netflix.spinnaker.tide.actor.polling
 
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
+import com.amazonaws.services.ec2.model.DescribeClassicLinkInstancesRequest
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPollingProtocol, EddaPoll}
 import com.netflix.spinnaker.tide.actor.polling.ClassicLinkInstanceIdPollingActor.LatestClassicLinkInstanceIds
-import com.netflix.spinnaker.tide.actor.service.EddaActor
-import com.netflix.spinnaker.tide.actor.service.EddaActor.{FoundClassicLinkInstanceIds, RetrieveClassicLinkInstanceIds}
 import com.netflix.spinnaker.tide.model.AkkaClustered
 import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
+import scala.collection.JavaConversions._
 
 class ClassicLinkInstanceIdPollingActor extends PollingActor {
 
@@ -16,17 +16,16 @@ class ClassicLinkInstanceIdPollingActor extends PollingActor {
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
 
-  var location: AwsLocation = _
-
   override def receive: Receive = {
     case msg: EddaPoll =>
-      location = msg.location
+      val location = msg.location
       pollScheduler.scheduleNextPoll(msg)
-      clusterSharding.shardRegion(EddaActor.typeName) ! RetrieveClassicLinkInstanceIds(location)
-
-    case msg: FoundClassicLinkInstanceIds =>
-      val instanceIds = LatestClassicLinkInstanceIds(location, msg.resources)
-      clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! instanceIds
+      val amazonEc2 = getAwsServiceProvider(location).getAmazonEC2
+      val instanceIds = retrieveAll{ nextToken =>
+        val result = amazonEc2.describeClassicLinkInstances(new DescribeClassicLinkInstancesRequest().withNextToken(nextToken))
+        (result.getInstances.map(_.getInstanceId), Option(result.getNextToken))
+      }
+      clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! LatestClassicLinkInstanceIds(location, instanceIds)
   }
 
 }
