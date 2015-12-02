@@ -46,7 +46,7 @@ class ClassicLinkInstancesActor extends Actor {
   }
 }
 
-sealed trait ClassicLinkInstanceProtocol
+sealed trait ClassicLinkInstanceProtocol extends Serializable
 
 object ClassicLinkInstancesActor extends ClusteredActorObject {
   val props = Props[ClassicLinkInstancesActor]
