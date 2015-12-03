@@ -75,7 +75,7 @@ allprojects {
   ext {
     versions = [
       scala  : "2.11",
-      akka   : "2.3.9",
+      akka   : "2.3.12",
       scalaTest: "2.2.4"
     ]
   }
