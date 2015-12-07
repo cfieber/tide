@@ -25,6 +25,7 @@ class ClassicLinkInstanceIdPollingActor extends PollingActor {
         val result = amazonEc2.describeClassicLinkInstances(new DescribeClassicLinkInstancesRequest().withNextToken(nextToken))
         (result.getInstances.map(_.getInstanceId), Option(result.getNextToken))
       }
+      log.info(s"***** LatestClassicLinkInstanceIds - $location - $instanceIds")
       clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! LatestClassicLinkInstanceIds(location, instanceIds)
   }
 

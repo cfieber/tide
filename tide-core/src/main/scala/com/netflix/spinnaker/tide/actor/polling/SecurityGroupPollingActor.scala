@@ -60,6 +60,7 @@ class SecurityGroupPollingActor extends PollingActor {
       securityGroupIdToName = securityGroups.map { securityGroup =>
         securityGroup.groupId -> securityGroup.identity
       }.toMap
+      log.info(s"***** LatestSecurityGroupIdToNameMappings - $location - $securityGroupIdToName")
       val securityGroupIdToNameMsg = LatestSecurityGroupIdToNameMappings(location, securityGroupIdToName)
       clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! securityGroupIdToNameMsg
       clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! securityGroupIdToNameMsg
