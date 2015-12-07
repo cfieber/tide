@@ -103,6 +103,7 @@ class ServerGroupPollingActor() extends PollingActor {
                 }
               }
             }
+            log.info(s"***** NonclassicLinkedLaunchConfigEc2ClassicInstanceIds - $location - ${nonClassicLinkedLaunchConfigInstanceIds.distinct}")
             clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) !
               NonclassicLinkedLaunchConfigEc2ClassicInstanceIds(location, nonClassicLinkedLaunchConfigInstanceIds.distinct)
           }

@@ -20,6 +20,7 @@ class ClassicLinkInstancesActor extends Actor with ActorLogging {
 
   override def receive: Receive = {
     case ClassicLinkSecurityGroupNames(_, names) =>
+      // persist
       classicLinkSecurityGroupNames = names
 
     case LatestVpcs(_, vpcs, _) =>
@@ -38,19 +39,14 @@ class ClassicLinkInstancesActor extends Actor with ActorLogging {
     case GetInstancesNeedingClassicLinkAttached(_) =>
       (classicLinkVpcId, classicLinkInstanceIds, nonclassicLinkedLaunchConfigEc2ClassicInstanceIds) match {
         case (Some(vpcId), Some(attachedInstances), Some(allInstances)) =>
-          log.info(s"****** GetInstancesNeedingClassicLinkAttached requirements met.")
-          log.info(s"classicLinkVpcId - $classicLinkVpcId")
-          log.info(s"classicLinkInstanceIds - $classicLinkInstanceIds")
-          log.info(s"nonclassicLinkedLaunchConfigEc2ClassicInstanceIds - $nonclassicLinkedLaunchConfigEc2ClassicInstanceIds")
-          log.info(s"classicLinkSecurityGroupIds - $classicLinkSecurityGroupIds")
           val unattachedInstances = allInstances.diff(attachedInstances)
           sender() ! InstancesNeedingClassicLinkAttached(vpcId, classicLinkSecurityGroupIds, unattachedInstances)
         case _ =>
-          log.info(s"*!*!*! GetInstancesNeedingClassicLinkAttached requirements not met.")
-          log.info(s"classicLinkVpcId - $classicLinkVpcId")
-          log.info(s"classicLinkInstanceIds - $classicLinkInstanceIds")
-          log.info(s"nonclassicLinkedLaunchConfigEc2ClassicInstanceIds - $nonclassicLinkedLaunchConfigEc2ClassicInstanceIds")
-          log.info(s"classicLinkSecurityGroupIds - $classicLinkSecurityGroupIds")
+          log.info(s"""*!*!*! GetInstancesNeedingClassicLinkAttached requirements not met.
+          classicLinkVpcId - $classicLinkVpcId
+          classicLinkInstanceIds - $classicLinkInstanceIds
+          nonclassicLinkedLaunchConfigEc2ClassicInstanceIds - $nonclassicLinkedLaunchConfigEc2ClassicInstanceIds
+          classicLinkSecurityGroupIds - $classicLinkSecurityGroupIds""")
       }
 
   }
