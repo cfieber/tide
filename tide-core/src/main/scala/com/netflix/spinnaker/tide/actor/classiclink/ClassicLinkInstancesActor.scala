@@ -1,6 +1,6 @@
 package com.netflix.spinnaker.tide.actor.classiclink
 
-import akka.actor.{Actor, Props}
+import akka.actor.{ActorLogging, Actor, Props}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.{ClassicLinkSecurityGroupNames, InstancesNeedingClassicLinkAttached, GetInstancesNeedingClassicLinkAttached}
 import com.netflix.spinnaker.tide.actor.polling.ClassicLinkInstanceIdPollingActor.LatestClassicLinkInstanceIds
@@ -10,7 +10,7 @@ import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.LatestVpcs
 import com.netflix.spinnaker.tide.model.AkkaClustered
 import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
 
-class ClassicLinkInstancesActor extends Actor {
+class ClassicLinkInstancesActor extends Actor with ActorLogging {
 
   var classicLinkSecurityGroupNames: Seq[String] = Nil
   var classicLinkSecurityGroupIds: Seq[String] = Nil
@@ -38,9 +38,19 @@ class ClassicLinkInstancesActor extends Actor {
     case GetInstancesNeedingClassicLinkAttached(_) =>
       (classicLinkVpcId, classicLinkInstanceIds, nonclassicLinkedLaunchConfigEc2ClassicInstanceIds) match {
         case (Some(vpcId), Some(attachedInstances), Some(allInstances)) =>
+          log.info(s"****** GetInstancesNeedingClassicLinkAttached requirements met.")
+          log.info(s"classicLinkVpcId - $classicLinkVpcId")
+          log.info(s"classicLinkInstanceIds - $classicLinkInstanceIds")
+          log.info(s"nonclassicLinkedLaunchConfigEc2ClassicInstanceIds - $nonclassicLinkedLaunchConfigEc2ClassicInstanceIds")
+          log.info(s"classicLinkSecurityGroupIds - $classicLinkSecurityGroupIds")
           val unattachedInstances = allInstances.diff(attachedInstances)
           sender() ! InstancesNeedingClassicLinkAttached(vpcId, classicLinkSecurityGroupIds, unattachedInstances)
         case _ =>
+          log.info(s"*!*!*! GetInstancesNeedingClassicLinkAttached requirements not met.")
+          log.info(s"classicLinkVpcId - $classicLinkVpcId")
+          log.info(s"classicLinkInstanceIds - $classicLinkInstanceIds")
+          log.info(s"nonclassicLinkedLaunchConfigEc2ClassicInstanceIds - $nonclassicLinkedLaunchConfigEc2ClassicInstanceIds")
+          log.info(s"classicLinkSecurityGroupIds - $classicLinkSecurityGroupIds")
       }
 
   }
