@@ -1,6 +1,7 @@
 package com.netflix.spinnaker.tide.actor.classiclink
 
 import akka.actor.{ActorLogging, Actor, Props}
+import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.{ClassicLinkSecurityGroupNames, InstancesNeedingClassicLinkAttached, GetInstancesNeedingClassicLinkAttached}
 import com.netflix.spinnaker.tide.actor.polling.ClassicLinkInstanceIdPollingActor.LatestClassicLinkInstanceIds
@@ -10,7 +11,9 @@ import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.LatestVpcs
 import com.netflix.spinnaker.tide.model.AkkaClustered
 import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
 
-class ClassicLinkInstancesActor extends Actor with ActorLogging {
+class ClassicLinkInstancesActor extends PersistentActor with ActorLogging {
+
+  override def persistenceId: String = self.path.name
 
   var classicLinkSecurityGroupNames: Seq[String] = Nil
   var classicLinkSecurityGroupIds: Seq[String] = Nil
@@ -18,10 +21,11 @@ class ClassicLinkInstancesActor extends Actor with ActorLogging {
   var classicLinkInstanceIds: Option[Seq[String]] = None
   var nonclassicLinkedLaunchConfigEc2ClassicInstanceIds: Option[Seq[String]] = None
 
-  override def receive: Receive = {
-    case ClassicLinkSecurityGroupNames(_, names) =>
-      // persist
-      classicLinkSecurityGroupNames = names
+  override def receiveCommand: Receive = {
+    case msg: ClassicLinkSecurityGroupNames =>
+      persist(msg) { names =>
+        updateState(names)
+      }
 
     case LatestVpcs(_, vpcs, _) =>
       classicLinkVpcId = vpcs.find(_.classicLinkEnabled).map(_.vpcId)
@@ -36,19 +40,34 @@ class ClassicLinkInstancesActor extends Actor with ActorLogging {
     case NonclassicLinkedLaunchConfigEc2ClassicInstanceIds(_, instanceIds) =>
       nonclassicLinkedLaunchConfigEc2ClassicInstanceIds = Some(instanceIds)
 
-    case GetInstancesNeedingClassicLinkAttached(_) =>
+    case GetInstancesNeedingClassicLinkAttached(location) =>
       (classicLinkVpcId, classicLinkInstanceIds, nonclassicLinkedLaunchConfigEc2ClassicInstanceIds) match {
-        case (Some(vpcId), Some(attachedInstances), Some(allInstances)) =>
+        case (Some(vpcId), Some(attachedInstances), Some(allInstances)) if classicLinkSecurityGroupIds.nonEmpty =>
           val unattachedInstances = allInstances.diff(attachedInstances)
           sender() ! InstancesNeedingClassicLinkAttached(vpcId, classicLinkSecurityGroupIds, unattachedInstances)
         case _ =>
-          log.info(s"""*!*!*! GetInstancesNeedingClassicLinkAttached requirements not met.
+          log.info(s"""*!*!*! GetInstancesNeedingClassicLinkAttached requirements not met in $location.
           classicLinkVpcId - $classicLinkVpcId
-          classicLinkInstanceIds - $classicLinkInstanceIds
-          nonclassicLinkedLaunchConfigEc2ClassicInstanceIds - $nonclassicLinkedLaunchConfigEc2ClassicInstanceIds
+          classicLinkInstanceIds - ${classicLinkInstanceIds.isDefined}
+          nonclassicLinkedLaunchConfigEc2ClassicInstanceIds - ${nonclassicLinkedLaunchConfigEc2ClassicInstanceIds.isDefined}
+          classicLinkSecurityGroupNames - $classicLinkSecurityGroupNames
           classicLinkSecurityGroupIds - $classicLinkSecurityGroupIds""")
       }
 
+  }
+
+  override def receiveRecover: Receive = {
+    case event: RecoveryCompleted =>
+    case event =>
+      updateState(event)
+  }
+
+  def updateState(event: Any) = {
+    event match {
+      case msg: ClassicLinkSecurityGroupNames =>
+        classicLinkSecurityGroupNames = msg.names
+      case _ =>
+    }
   }
 }
 

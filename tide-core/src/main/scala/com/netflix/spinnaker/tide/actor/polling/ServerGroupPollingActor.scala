@@ -21,7 +21,7 @@ import akka.contrib.pattern.ClusterSharding
 import com.amazonaws.services.autoscaling.model.{DescribeLaunchConfigurationsRequest, DescribeAutoScalingGroupsRequest}
 import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
-import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPollingProtocol, EddaPoll}
+import com.netflix.spinnaker.tide.actor.polling.AwsPollingActor.{AwsPollingProtocol, AwsPoll}
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.LatestSecurityGroupIdToNameMappings
 import com.netflix.spinnaker.tide.actor.polling.ServerGroupPollingActor.NonclassicLinkedLaunchConfigEc2ClassicInstanceIds
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.LatestVpcs
@@ -34,7 +34,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 class ServerGroupPollingActor() extends PollingActor {
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
-  override def pollScheduler = new PollSchedulerActorImpl(context, ServerGroupPollingActor)
 
   var latestSecurityGroups: Option[LatestSecurityGroupIdToNameMappings] = None
   var latestVpcs: Option[LatestVpcs] = None
@@ -48,9 +47,8 @@ class ServerGroupPollingActor() extends PollingActor {
     case msg: LatestVpcs =>
       latestVpcs = Option(msg)
 
-    case msg: EddaPoll =>
+    case msg: AwsPoll =>
       val location = msg.location
-      pollScheduler.scheduleNextPoll(msg)
       (latestSecurityGroups, latestVpcs) match {
         case (Some(LatestSecurityGroupIdToNameMappings(_, securityGroupIdToName)), Some(LatestVpcs(_, vpcs, subnets))) =>
           val autoScaling = getAwsServiceProvider(location).getAutoScaling
@@ -103,7 +101,6 @@ class ServerGroupPollingActor() extends PollingActor {
                 }
               }
             }
-            log.info(s"***** NonclassicLinkedLaunchConfigEc2ClassicInstanceIds - $location - ${nonClassicLinkedLaunchConfigInstanceIds.distinct}")
             clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) !
               NonclassicLinkedLaunchConfigEc2ClassicInstanceIds(location, nonClassicLinkedLaunchConfigInstanceIds.distinct)
           }
@@ -116,7 +113,7 @@ class ServerGroupPollingActor() extends PollingActor {
 object ServerGroupPollingActor extends PollingActorObject {
   val props = Props[ServerGroupPollingActor]
 
-  case class NonclassicLinkedLaunchConfigEc2ClassicInstanceIds(location: AwsLocation, instanceIds: Seq[String]) extends EddaPollingProtocol with AkkaClustered {
+  case class NonclassicLinkedLaunchConfigEc2ClassicInstanceIds(location: AwsLocation, instanceIds: Seq[String]) extends AwsPollingProtocol with AkkaClustered {
     override def akkaIdentifier: String = location.akkaIdentifier
   }
 }

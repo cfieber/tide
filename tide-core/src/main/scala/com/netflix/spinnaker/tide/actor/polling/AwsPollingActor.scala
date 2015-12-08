@@ -19,11 +19,11 @@ package com.netflix.spinnaker.tide.actor.polling
 import com.netflix.spinnaker.tide.actor.polling.PollingActor.Poll
 import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
 
-object EddaPollingActor {
-  trait EddaPollingProtocol extends PollingProtocol {
+object AwsPollingActor {
+  trait AwsPollingProtocol extends PollingProtocol {
     val location: AwsLocation
     def pollingIdentifier = location.akkaIdentifier
   }
-  case class EddaPoll(location: AwsLocation) extends EddaPollingProtocol with Poll
+  case class AwsPoll(location: AwsLocation) extends AwsPollingProtocol with Poll
 }
 

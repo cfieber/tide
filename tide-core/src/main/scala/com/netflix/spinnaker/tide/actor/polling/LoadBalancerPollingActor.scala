@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide.actor.polling
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
 import com.amazonaws.services.elasticloadbalancing.model.DescribeLoadBalancersRequest
-import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPoll
+import com.netflix.spinnaker.tide.actor.polling.AwsPollingActor.AwsPoll
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.LatestSecurityGroupIdToNameMappings
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.LatestVpcs
 import com.netflix.spinnaker.tide.model._
@@ -30,7 +30,6 @@ import scala.collection.JavaConversions._
 class LoadBalancerPollingActor() extends PollingActor {
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
-  override def pollScheduler = new PollSchedulerActorImpl(context, LoadBalancerPollingActor)
 
   var latestSecurityGroups: Option[LatestSecurityGroupIdToNameMappings] = None
   var latestVpcs: Option[LatestVpcs] = None
@@ -44,9 +43,8 @@ class LoadBalancerPollingActor() extends PollingActor {
     case msg: LatestVpcs =>
       latestVpcs = Option(msg)
 
-    case msg: EddaPoll =>
+    case msg: AwsPoll =>
       val location = msg.location
-      pollScheduler.scheduleNextPoll(msg)
       (latestSecurityGroups, latestVpcs) match {
         case (Some(LatestSecurityGroupIdToNameMappings(_, securityGroupIdToName)), Some(LatestVpcs(_, vpcs, subnets))) =>
           val loadBalancing = getAwsServiceProvider(location).getAmazonElasticLoadBalancing

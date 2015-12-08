@@ -26,15 +26,12 @@ import com.netflix.spinnaker.tide.actor.service.Front50Actor.{FoundPipelines, Ge
 
 class PipelinePollingActor() extends PollingActor {
 
-  override def pollScheduler = new PollSchedulerActorImpl(context, PipelinePollingActor)
-
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
 
   var currentIds: Seq[String] = Nil
 
   override def receive: Receive = {
     case msg: Poll =>
-      pollScheduler.scheduleNextPoll(msg)
       clusterSharding.shardRegion(Front50Actor.typeName) ! GetPipelines()
 
     case msg: FoundPipelines =>

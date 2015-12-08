@@ -20,7 +20,7 @@ import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.ContractActorImpl
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
-import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.{EddaPoll, EddaPollingProtocol}
+import com.netflix.spinnaker.tide.actor.polling.AwsPollingActor.{AwsPoll, AwsPollingProtocol}
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.{LatestSecurityGroupIdToNameMappings, GetSecurityGroupIdToNameMappings}
 import com.netflix.spinnaker.tide.model._
 import AwsApi._
@@ -28,8 +28,6 @@ import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor
 import scala.collection.JavaConversions._
 
 class SecurityGroupPollingActor extends PollingActor {
-
-  override def pollScheduler = new PollSchedulerActorImpl(context, SecurityGroupPollingActor)
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
 
@@ -43,9 +41,8 @@ class SecurityGroupPollingActor extends PollingActor {
         sender() ! LatestSecurityGroupIdToNameMappings(msg.location, securityGroupIdToName)
       }
 
-    case msg: EddaPoll =>
+    case msg: AwsPoll =>
       val location = msg.location
-      pollScheduler.scheduleNextPoll(msg)
       val amazonEc2 = getAwsServiceProvider(location).getAmazonEC2
       val securityGroups = amazonEc2.describeSecurityGroups.getSecurityGroups.map(AwsConversion.securityGroupFrom)
 
@@ -60,7 +57,6 @@ class SecurityGroupPollingActor extends PollingActor {
       securityGroupIdToName = securityGroups.map { securityGroup =>
         securityGroup.groupId -> securityGroup.identity
       }.toMap
-      log.info(s"***** LatestSecurityGroupIdToNameMappings - $location - $securityGroupIdToName")
       val securityGroupIdToNameMsg = LatestSecurityGroupIdToNameMappings(location, securityGroupIdToName)
       clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! securityGroupIdToNameMsg
       clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! securityGroupIdToNameMsg
@@ -79,8 +75,8 @@ class SecurityGroupPollingActor extends PollingActor {
 object SecurityGroupPollingActor extends PollingActorObject {
   val props = Props[SecurityGroupPollingActor]
 
-  case class GetSecurityGroupIdToNameMappings(location: AwsLocation) extends EddaPollingProtocol
-  case class LatestSecurityGroupIdToNameMappings(location: AwsLocation, map: Map[String, SecurityGroupIdentity]) extends EddaPollingProtocol with AkkaClustered {
+  case class GetSecurityGroupIdToNameMappings(location: AwsLocation) extends AwsPollingProtocol
+  case class LatestSecurityGroupIdToNameMappings(location: AwsLocation, map: Map[String, SecurityGroupIdentity]) extends AwsPollingProtocol with AkkaClustered {
     override def akkaIdentifier: String = location.akkaIdentifier
   }
 }
@@ -90,7 +86,7 @@ trait SecurityGroupPollingContract {
 }
 
 class SecurityGroupPollingContractActor(val clusterSharding: ClusterSharding) extends SecurityGroupPollingContract
-  with ContractActorImpl[EddaPollingProtocol] {
+  with ContractActorImpl[AwsPollingProtocol] {
   val actorObject = SecurityGroupPollingActor
 
   def ask(msg: GetSecurityGroupIdToNameMappings): LatestSecurityGroupIdToNameMappings = {
