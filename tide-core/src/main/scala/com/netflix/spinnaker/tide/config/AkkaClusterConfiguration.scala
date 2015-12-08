@@ -22,24 +22,23 @@ import akka.actor.ActorSystem
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.config.OkHttpClientConfiguration
 import com.netflix.spinnaker.tide.actor.aws._
-import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.ClassicLinkSecurityGroupNames
 import com.netflix.spinnaker.tide.actor.classiclink.{AttachClassicLinkActor, ClassicLinkInstancesActor}
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor
 import com.netflix.spinnaker.tide.actor.copy.{ServerGroupDeepCopyActor, PipelineDeepCopyActor, DependencyCopyActor}
-import com.netflix.spinnaker.tide.actor.polling.EddaPollingActor.EddaPoll
-import com.netflix.spinnaker.tide.actor.polling.PipelinePollingActor.PipelinePoll
+import com.netflix.spinnaker.tide.actor.polling.PollingDirector.PollInit
 import com.netflix.spinnaker.tide.actor.polling._
 import com.netflix.spinnaker.tide.actor.service.{Front50Actor, CloudDriverActor}
 import com.netflix.spinnaker.tide.actor.service.CloudDriverActor.CloudDriverInit
 import com.netflix.spinnaker.tide.actor.service.Front50Actor.Front50Init
+import com.netflix.spinnaker.tide.actor.task.TaskDirector.GetRunningTasks
 import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector}
 import com.netflix.spinnaker.tide.actor.ClusterTestActor
-import com.netflix.spinnaker.tide.model.AwsApi._
 import org.springframework.beans.factory.annotation.{Value, Autowired}
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.{DependsOn, Bean, Configuration}
 import scala.beans.BeanProperty
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+import scala.collection.Map
 
 @DependsOn(Array("awsServiceProviderFactory"))
 @Configuration
@@ -77,6 +76,7 @@ class AkkaClusterConfiguration {
     ServerGroupPollingActor.startCluster(clusterSharding)
     PipelinePollingActor.startCluster(clusterSharding)
     ClassicLinkInstanceIdPollingActor.startCluster(clusterSharding)
+    PollingDirector.startCluster(clusterSharding)
 
     ServerGroupDeepCopyActor.startCluster(clusterSharding)
     PipelineDeepCopyActor.startCluster(clusterSharding)
@@ -89,30 +89,13 @@ class AkkaClusterConfiguration {
     AttributeDiffActor.startCluster(clusterSharding)
   }
 
-
   def initActors() = {
     clusterSharding.shardRegion(CloudDriverActor.typeName) ! CloudDriverInit(cloudDriverApiUrl)
     clusterSharding.shardRegion(Front50Actor.typeName) ! Front50Init(front50ApiUrl)
-
-    clusterSharding.shardRegion(PipelinePollingActor.typeName) ! PipelinePoll()
-
-    val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, ClassicLinkInstanceIdPollingActor,
-      SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
-    val accounts = eddaSettings.getAccountToRegionsMapping.keySet()
-    for (account <- accounts) {
-      val regions: java.util.List[String] = eddaSettings.getAccountToRegionsMapping.get(account)
-      for (region <- regions) {
-        val location = AwsLocation(account, region)
-        for (poller <- pollers) {
-          clusterSharding.shardRegion(poller.typeName) ! EddaPoll(location)
-        }
-        val classicLinkSecurityGroupNames: Seq[String] = classicLinkSettings.getSecurityGroups
-        clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! ClassicLinkSecurityGroupNames(location,
-          classicLinkSecurityGroupNames)
-      }
-    }
+    val accountsToRegions: Map[String, Set[String]] = awsSettings.getAccountToRegionsMapping.asScala.mapValues(_.asScala.toSet)
+    clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(accountsToRegions, classicLinkSettings.getSecurityGroups.asScala)
+    clusterSharding.shardRegion(TaskDirector.typeName) ! GetRunningTasks()
   }
-
 
   @Bean
   def clusterSharding: ClusterSharding = {
@@ -121,8 +104,8 @@ class AkkaClusterConfiguration {
 
   @Bean
   @ConfigurationProperties("edda")
-  def eddaSettings: EddaSettings = {
-    new EddaSettings()
+  def awsSettings: AwsSettings = {
+    new AwsSettings()
   }
 
   @Bean
@@ -133,8 +116,7 @@ class AkkaClusterConfiguration {
 
 }
 
-class EddaSettings {
-  @BeanProperty var urlTemplate: String = _
+class AwsSettings {
   @BeanProperty var accountToRegionsMapping: java.util.HashMap[String, java.util.List[String]] = _
 }
 

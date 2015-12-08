@@ -24,8 +24,6 @@ import com.netflix.spinnaker.tide.model.AwsServiceProvider
 
 trait PollingActor extends Actor with ActorLogging {
 
-  def pollScheduler: PollScheduler
-
   override def preRestart(reason: Throwable, message: Option[Any]) = {
     reason.printStackTrace()
     super.preRestart(reason, message)
