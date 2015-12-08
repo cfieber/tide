@@ -1,5 +1,7 @@
 package com.netflix.spinnaker.tide.actor.polling
 
+import java.util.Date
+
 import akka.actor.{ActorRef, Props, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
@@ -11,7 +13,6 @@ import com.netflix.spinnaker.tide.actor.polling.PipelinePollingActor.PipelinePol
 import com.netflix.spinnaker.tide.actor.polling.PollingDirector.{Poll, PollInit}
 import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
 import scala.concurrent.duration.DurationInt
-import scala.collection.Map
 
 class PollingDirector extends PersistentActor with ActorLogging {
 
@@ -43,10 +44,11 @@ class PollingDirector extends PersistentActor with ActorLogging {
 
   def polling(pollInit: PollInit): Receive = {
     case poll: Poll =>
+      log.info(s"******* start poll ${new Date().getTime}")
       getShardCluster(PipelinePollingActor.typeName) ! PipelinePoll()
       val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, ClassicLinkInstanceIdPollingActor,
         SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
-      val accounts = pollInit.accountsToRegions.keySet
+      val accounts: Set[String] = pollInit.accountsToRegions.keySet
       for (account <- accounts) {
         val regions = pollInit.accountsToRegions.getOrElse(account, Nil)
         for (region <- regions) {
@@ -59,6 +61,7 @@ class PollingDirector extends PersistentActor with ActorLogging {
             classicLinkSecurityGroupNames)
         }
       }
+      log.info(s"******* end poll ${new Date().getTime}")
     case _ =>
   }
 
