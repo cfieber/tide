@@ -38,7 +38,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.{DependsOn, Bean, Configuration}
 import scala.beans.BeanProperty
 import scala.collection.JavaConverters._
-import scala.collection.Map
 
 @DependsOn(Array("awsServiceProviderFactory"))
 @Configuration
@@ -92,7 +91,7 @@ class AkkaClusterConfiguration {
   def initActors() = {
     clusterSharding.shardRegion(CloudDriverActor.typeName) ! CloudDriverInit(cloudDriverApiUrl)
     clusterSharding.shardRegion(Front50Actor.typeName) ! Front50Init(front50ApiUrl)
-    val accountsToRegions: Map[String, Set[String]] = awsSettings.getAccountToRegionsMapping.asScala.mapValues(_.asScala.toSet)
+    val accountsToRegions: Map[String, Set[String]] = awsSettings.getAccountToRegionsMapping.asScala.mapValues(_.asScala.toSet).toMap
     clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(accountsToRegions, classicLinkSettings.getSecurityGroups.asScala)
     clusterSharding.shardRegion(TaskDirector.typeName) ! GetRunningTasks()
   }
