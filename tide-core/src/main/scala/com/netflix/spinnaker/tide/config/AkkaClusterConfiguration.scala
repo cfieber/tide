@@ -18,7 +18,7 @@ package com.netflix.spinnaker.tide.config
 
 import javax.annotation.PostConstruct
 
-import akka.actor.ActorSystem
+import akka.actor.{Props, ActorSystem}
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.config.OkHttpClientConfiguration
 import com.netflix.spinnaker.tide.actor.aws._
@@ -32,7 +32,7 @@ import com.netflix.spinnaker.tide.actor.service.CloudDriverActor.CloudDriverInit
 import com.netflix.spinnaker.tide.actor.service.Front50Actor.Front50Init
 import com.netflix.spinnaker.tide.actor.task.TaskDirector.GetRunningTasks
 import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector}
-import com.netflix.spinnaker.tide.actor.ClusterTestActor
+import com.netflix.spinnaker.tide.actor.{ContinuousInitActor, ClusterTestActor}
 import org.springframework.beans.factory.annotation.{Value, Autowired}
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.context.annotation.{DependsOn, Bean, Configuration}
@@ -92,8 +92,9 @@ class AkkaClusterConfiguration {
     clusterSharding.shardRegion(CloudDriverActor.typeName) ! CloudDriverInit(cloudDriverApiUrl)
     clusterSharding.shardRegion(Front50Actor.typeName) ! Front50Init(front50ApiUrl)
     val accountsToRegions: Map[String, Set[String]] = awsSettings.getAccountToRegionsMapping.asScala.mapValues(_.asScala.toSet).toMap
-    clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(accountsToRegions, classicLinkSettings.getSecurityGroups.asScala)
-    clusterSharding.shardRegion(TaskDirector.typeName) ! GetRunningTasks()
+    val classicLinkSecurityGroupNames: Seq[String] = classicLinkSettings.getSecurityGroups.asScala
+    val props = Props(classOf[ContinuousInitActor], clusterSharding, accountsToRegions, classicLinkSecurityGroupNames)
+    system.actorOf(props, "ContinuousInit")
   }
 
   @Bean
