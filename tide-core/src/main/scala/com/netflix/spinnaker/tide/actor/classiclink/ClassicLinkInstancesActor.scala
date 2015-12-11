@@ -40,11 +40,15 @@ class ClassicLinkInstancesActor extends PersistentActor with ActorLogging {
     case NonclassicLinkedLaunchConfigEc2ClassicInstanceIds(_, instanceIds) =>
       nonclassicLinkedLaunchConfigEc2ClassicInstanceIds = Some(instanceIds)
 
-    case GetInstancesNeedingClassicLinkAttached(location) =>
+    case GetInstancesNeedingClassicLinkAttached(location, limitOption) =>
       (classicLinkVpcId, classicLinkInstanceIds, nonclassicLinkedLaunchConfigEc2ClassicInstanceIds) match {
         case (Some(vpcId), Some(attachedInstances), Some(allInstances)) if classicLinkSecurityGroupIds.nonEmpty =>
           val unattachedInstances = allInstances.diff(attachedInstances)
-          sender() ! InstancesNeedingClassicLinkAttached(vpcId, classicLinkSecurityGroupIds, unattachedInstances)
+          val instanceIdsToAttach = limitOption match {
+            case Some(limit) => util.Random.shuffle(unattachedInstances) take limit
+            case None => unattachedInstances
+          }
+          sender() ! InstancesNeedingClassicLinkAttached(vpcId, classicLinkSecurityGroupIds, instanceIdsToAttach)
         case _ =>
           log.info(s"""!**** GetInstancesNeedingClassicLinkAttached requirements not met in $location.
           classicLinkVpcId - $classicLinkVpcId
@@ -80,7 +84,7 @@ object ClassicLinkInstancesActor extends ClusteredActorObject {
     override def akkaIdentifier: String = location.akkaIdentifier
   }
 
-  case class GetInstancesNeedingClassicLinkAttached(location: AwsLocation) extends ClassicLinkInstanceProtocol with AkkaClustered {
+  case class GetInstancesNeedingClassicLinkAttached(location: AwsLocation, limit: Option[Integer] = None) extends ClassicLinkInstanceProtocol with AkkaClustered {
     override def akkaIdentifier: String = location.akkaIdentifier
   }
   case class InstancesNeedingClassicLinkAttached(classicLinkVpcId: String,

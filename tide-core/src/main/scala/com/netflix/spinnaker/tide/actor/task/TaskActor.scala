@@ -195,6 +195,8 @@ object TaskActor extends TaskActorObject {
 
   trait TaskResult
 
+  case class NoResult() extends TaskResult
+
   trait ChildTaskProtocol extends TaskProtocol {
     def parentTaskId: String
     val taskId = parentTaskId

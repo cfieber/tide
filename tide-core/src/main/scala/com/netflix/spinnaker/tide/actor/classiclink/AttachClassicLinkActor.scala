@@ -4,7 +4,7 @@ import akka.actor.{Props, Cancellable, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.TaskActorObject
-import com.netflix.spinnaker.tide.actor.classiclink.AttachClassicLinkActor.{ClearPreviouslyAttachedInstanceIds, AttachClassicLinkTask}
+import com.netflix.spinnaker.tide.actor.classiclink.AttachClassicLinkActor.{EndOfLife, AttachClassicLinkTask}
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.{GetInstancesNeedingClassicLinkAttached, InstancesNeedingClassicLinkAttached}
 import com.netflix.spinnaker.tide.actor.service.CloudDriverActor
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
@@ -21,13 +21,10 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
   private implicit val dispatcher = context.dispatcher
   def scheduler = context.system.scheduler
   private var pollForUnattachedInstances: Option[Cancellable] = None
-  private var clearPreviouslyAttachedInstanceIds: Option[Cancellable] = None
+  private var taskLifeTime: Option[Cancellable] = None
 
   var task: AttachClassicLinkTask = _
   var taskId: String = _
-
-  var previouslyAttachedInstanceIds: Seq[String] = Nil
-  var recentlyAttachedInstanceIds: Seq[String] = Nil
 
   val clusterSharding = ClusterSharding.get(context.system)
 
@@ -44,12 +41,9 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
 
   def pollForInstances(): Unit = {
     val classicLinkInstancesCluster = clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName)
-    val getInstances = GetInstancesNeedingClassicLinkAttached(task.location)
-    pollForUnattachedInstances = Option(scheduler.schedule(0 seconds, 10 seconds, classicLinkInstancesCluster, getInstances))
-    val attachClassicLinkCluster = clusterSharding.shardRegion(AttachClassicLinkActor.typeName)
-    clearPreviouslyAttachedInstanceIds = Option(scheduler.schedule(1 minutes, 1 minutes, self,
-      ClearPreviouslyAttachedInstanceIds()))
-
+    val getInstances = GetInstancesNeedingClassicLinkAttached(task.location, Option(task.batchCount))
+    pollForUnattachedInstances = Option(scheduler.schedule(0 seconds, 15 seconds, classicLinkInstancesCluster, getInstances))
+    taskLifeTime = Option(scheduler.scheduleOnce(2 hours, self, EndOfLife()))
   }
 
   override def receiveCommand: Receive = {
@@ -63,17 +57,11 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
       }
 
     case event: InstancesNeedingClassicLinkAttached =>
-      val newNonclassicLinkInstanceIds = event.nonclassicLinkInstanceIds.diff(recentlyAttachedInstanceIds)
-      val instanceIdsToAttach = util.Random.shuffle(newNonclassicLinkInstanceIds) take task.batchCount
+      val instanceIdsToAttach = event.nonclassicLinkInstanceIds
       val cloudDriver = clusterSharding.shardRegion(CloudDriverActor.typeName)
       val attachCommand = AttachClassicLinkVpc(event.classicLinkVpcId, event.classicLinkSecurityGroupIds)
       if (instanceIdsToAttach.nonEmpty) {
-        val newInstances = instanceIdsToAttach.toSet.diff(previouslyAttachedInstanceIds.toSet)
-        if (newInstances.nonEmpty) {
-          // Don't log every time we just retry "ghost" instances. It fills up the log with noise.
-          sendTaskEvent(Log(taskId, s"Attaching $attachCommand to $instanceIdsToAttach"))
-        }
-        recentlyAttachedInstanceIds ++= instanceIdsToAttach
+        sendTaskEvent(Log(taskId, s"Attaching $attachCommand to $instanceIdsToAttach"))
         instanceIdsToAttach.foreach { instanceId =>
           if (!task.dryRun) {
             val awsReference = AwsReference(task.location, InstanceIdentity(instanceId))
@@ -82,14 +70,10 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
         }
       }
 
-    case event: ClearPreviouslyAttachedInstanceIds =>
-      previouslyAttachedInstanceIds = recentlyAttachedInstanceIds
-      recentlyAttachedInstanceIds = Nil
-
     case event: TaskComplete =>
       persist(event) { it =>
         pollForUnattachedInstances.foreach(_.cancel())
-        clearPreviouslyAttachedInstanceIds.foreach(_.cancel())
+        taskLifeTime.foreach(_.cancel())
         if (!task.dryRun) {
           val logMessage = event match {
             case taskSuccess: TaskSuccess => "Task complete."
@@ -99,6 +83,10 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
           sendTaskEvent(Log(taskId, logMessage))
         }
       }
+
+    case event: EndOfLife =>
+      sendTaskEvent(TaskSuccess(taskId, task, NoResult()))
+      sendTaskEvent(RestartTask(taskId))
 
   }
 
@@ -131,6 +119,6 @@ object AttachClassicLinkActor extends TaskActorObject {
     override def executionActorTypeName: String = typeName
   }
 
-  case class ClearPreviouslyAttachedInstanceIds() extends AttachClassicLinkProtocol
+  case class EndOfLife()
 }
 
