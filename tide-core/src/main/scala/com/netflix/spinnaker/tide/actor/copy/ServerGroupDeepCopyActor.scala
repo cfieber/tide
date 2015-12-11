@@ -199,6 +199,7 @@ object ServerGroupDeepCopyActor extends TaskActorObject {
     extends TaskDescription with ServerGroupDeepCopyProtocol {
     val taskType: String = "ServerGroupDeepCopyTask"
     val executionActorTypeName: String = typeName
+    override def summary: String = s"Copy server group $source to $target (dryRun: $dryRun)."
   }
   case class CloudDriverTaskReference(taskId: String) extends ServerGroupDeepCopyProtocol
   case class StartServerGroupCloning() extends ServerGroupDeepCopyProtocol

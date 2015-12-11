@@ -293,6 +293,7 @@ object DependencyCopyActor extends TaskActorObject {
                                 dryRun: Boolean = false) extends TaskDescription with DependencyCopyProtocol {
     val taskType: String = "DependencyCopyTask"
     val executionActorTypeName: String = typeName
+    override def summary: String = s"Dependency copy from $source to $target (requiredSecurityGroupNames: $requiredSecurityGroupNames, sourceLoadBalancerNames: $sourceLoadBalancerNames, dryRun: $dryRun)."
   }
   case class VpcIds(source: Option[String], target: Option[String]) extends DependencyCopyProtocol
   case class CheckCompletion() extends DependencyCopyProtocol

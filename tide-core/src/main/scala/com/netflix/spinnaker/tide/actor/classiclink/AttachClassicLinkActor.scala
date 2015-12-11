@@ -117,6 +117,7 @@ object AttachClassicLinkActor extends TaskActorObject {
                                    dryRun: Boolean = false) extends TaskDescription with AttachClassicLinkProtocol {
     override def taskType: String = "AttachClassicLinkTask"
     override def executionActorTypeName: String = typeName
+    override def summary: String = s"Attach classic link in $location (batchCount: $batchCount, dryRun: $dryRun)."
   }
 
   case class EndOfLife()
