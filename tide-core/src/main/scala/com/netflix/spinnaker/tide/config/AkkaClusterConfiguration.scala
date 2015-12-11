@@ -20,6 +20,7 @@ import javax.annotation.PostConstruct
 
 import akka.actor.{Props, ActorSystem}
 import akka.contrib.pattern.ClusterSharding
+import com.netflix.spinnaker.clouddriver.aws.security.config.CredentialsConfig
 import com.netflix.spinnaker.config.OkHttpClientConfiguration
 import com.netflix.spinnaker.tide.actor.aws._
 import com.netflix.spinnaker.tide.actor.classiclink.{AttachClassicLinkActor, ClassicLinkInstancesActor}
@@ -44,6 +45,8 @@ import scala.collection.JavaConverters._
 class AkkaClusterConfiguration {
 
   @Autowired var system: ActorSystem = _
+
+  @Autowired var credentialsConfig: CredentialsConfig = _
 
   @Autowired var okHttpClientConfiguration: OkHttpClientConfiguration = _
 
@@ -91,9 +94,8 @@ class AkkaClusterConfiguration {
   def initActors() = {
     clusterSharding.shardRegion(CloudDriverActor.typeName) ! CloudDriverInit(cloudDriverApiUrl)
     clusterSharding.shardRegion(Front50Actor.typeName) ! Front50Init(front50ApiUrl)
-    val accountsToRegions: Map[String, Set[String]] = awsSettings.getAccountToRegionsMapping.asScala.mapValues(_.asScala.toSet).toMap
     val classicLinkSecurityGroupNames: Seq[String] = classicLinkSettings.getSecurityGroups.asScala
-    val props = Props(classOf[ContinuousInitActor], clusterSharding, accountsToRegions, classicLinkSecurityGroupNames)
+    val props = Props(classOf[ContinuousInitActor], clusterSharding, credentialsConfig, classicLinkSecurityGroupNames)
     system.actorOf(props, "ContinuousInit")
   }
 
@@ -103,21 +105,11 @@ class AkkaClusterConfiguration {
   }
 
   @Bean
-  @ConfigurationProperties("edda")
-  def awsSettings: AwsSettings = {
-    new AwsSettings()
-  }
-
-  @Bean
   @ConfigurationProperties("classicLink")
   def classicLinkSettings: ClassicLinkSettings = {
     new ClassicLinkSettings()
   }
 
-}
-
-class AwsSettings {
-  @BeanProperty var accountToRegionsMapping: java.util.HashMap[String, java.util.List[String]] = _
 }
 
 class ClassicLinkSettings {
