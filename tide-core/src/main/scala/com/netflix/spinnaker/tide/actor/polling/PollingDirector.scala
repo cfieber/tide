@@ -5,6 +5,8 @@ import java.util.Date
 import akka.actor.{ActorRef, Props, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryCompleted, PersistentActor}
+import com.netflix.spinnaker.clouddriver.aws.security.config.CredentialsConfig
+import com.netflix.spinnaker.clouddriver.aws.security.config.CredentialsConfig.Account
 import com.netflix.spinnaker.tide.actor.SingletonActorObject
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.ClassicLinkSecurityGroupNames
@@ -13,6 +15,7 @@ import com.netflix.spinnaker.tide.actor.polling.PipelinePollingActor.PipelinePol
 import com.netflix.spinnaker.tide.actor.polling.PollingDirector.{Poll, PollInit}
 import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
 import scala.concurrent.duration.DurationInt
+import scala.collection.JavaConverters._
 
 class PollingDirector extends PersistentActor with ActorLogging {
 
@@ -50,11 +53,11 @@ class PollingDirector extends PersistentActor with ActorLogging {
       getShardCluster(PipelinePollingActor.typeName) ! PipelinePoll()
       val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, ClassicLinkInstanceIdPollingActor,
         SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
-      val accounts: Set[String] = pollInit.accountsToRegions.keySet
+      val accounts: Set[Account] = pollInit.credentialsConfig.getAccounts.asScala.toSet
       for (account <- accounts) {
-        val regions = pollInit.accountsToRegions.getOrElse(account, Nil)
+        val regions = account.getRegions.asScala
         for (region <- regions) {
-          val location = AwsLocation(account, region)
+          val location = AwsLocation(account.getName, region.getName)
           for (poller <- pollers) {
             getShardCluster(poller.typeName) ! AwsPoll(location)
           }
@@ -89,7 +92,7 @@ sealed trait PollingDirectorProtocol extends Serializable
 object PollingDirector extends SingletonActorObject {
   val props = Props[PollingDirector]
 
-  case class PollInit(accountsToRegions: Map[String, Set[String]], classicLinkSecurityGroupNames: Seq[String]) extends PollingDirectorProtocol
+  case class PollInit(credentialsConfig: CredentialsConfig, classicLinkSecurityGroupNames: Seq[String]) extends PollingDirectorProtocol
   case class Poll() extends PollingDirectorProtocol
 
 }

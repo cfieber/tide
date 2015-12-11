@@ -4,6 +4,7 @@ import java.util.Date
 
 import akka.actor.{Actor, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
+import com.netflix.spinnaker.clouddriver.aws.security.config.CredentialsConfig
 import com.netflix.spinnaker.tide.actor.ContinuousInitActor.Tick
 import com.netflix.spinnaker.tide.actor.polling.PollingDirector
 import com.netflix.spinnaker.tide.actor.polling.PollingDirector.PollInit
@@ -12,7 +13,7 @@ import com.netflix.spinnaker.tide.actor.task.TaskDirector.GetRunningTasks
 import scala.concurrent.duration.DurationInt
 
 class ContinuousInitActor(clusterSharding: ClusterSharding,
-                          accountsToRegions: Map[String, Set[String]],
+                          credentialsConfig: CredentialsConfig,
                           classicLinkSecurityGroupNames: Seq[String]) extends Actor with ActorLogging {
 
   private implicit val dispatcher = context.dispatcher
@@ -29,7 +30,7 @@ class ContinuousInitActor(clusterSharding: ClusterSharding,
 
   override def receive = {
     case t: Tick =>
-      clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(accountsToRegions, classicLinkSecurityGroupNames)
+      clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(credentialsConfig, classicLinkSecurityGroupNames)
       clusterSharding.shardRegion(TaskDirector.typeName) ! GetRunningTasks()
     case _ =>
   }
