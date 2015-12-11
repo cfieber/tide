@@ -43,7 +43,7 @@ class TaskDirector extends PersistentActor with ActorLogging {
   override def receiveCommand: Receive = {
 
     case event: GetRunningTasks =>
-      sender() ! currentExecutionsByTaskId.keySet
+      sender() ! currentExecutionsByTaskId.values
 
     case event: GetTask =>
       getShardCluster(TaskActor.typeName) forward event
@@ -114,6 +114,7 @@ object TaskDirector extends SingletonActorObject {
   trait TaskDescription {
     def taskType: String
     def executionActorTypeName: String
+    def summary: String
   }
   case class ChildTaskDescriptions(parentTaskId: String, descriptions: Seq[TaskDescription]) extends TaskDirectorProtocol
 

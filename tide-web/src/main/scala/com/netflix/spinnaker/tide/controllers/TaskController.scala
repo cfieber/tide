@@ -5,7 +5,7 @@ import javax.servlet.http.HttpServletRequest
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.task.{TaskDirector, TaskActor}
-import com.netflix.spinnaker.tide.actor.task.TaskActor.{RestartTask, CancelTask, GetTask, TaskStatus}
+import com.netflix.spinnaker.tide.actor.task.TaskActor._
 import TaskDirector.GetRunningTasks
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RequestMethod._
@@ -39,9 +39,12 @@ class TaskController @Autowired()(private val clusterSharding: ClusterSharding) 
   }
 
   @RequestMapping(value = Array("/list"), method = Array(GET))
-  def getRunningTaskIds: Set[String] = {
-    val future = (clusterSharding.shardRegion(TaskDirector.typeName) ? GetRunningTasks()).mapTo[Set[String]]
-    Await.result(future, timeout.duration)
+  def getRunningTaskIds: Map[String, String] = {
+    val future = (clusterSharding.shardRegion(TaskDirector.typeName) ? GetRunningTasks()).mapTo[Iterable[ExecuteTask]]
+    val tasks = Await.result(future, timeout.duration).toList
+    tasks.sortBy(_.taskId).map { task =>
+      task.taskId -> task.description.summary
+    }.toMap
   }
 
 }

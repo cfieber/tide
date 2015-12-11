@@ -184,6 +184,7 @@ object PipelineDeepCopyActor extends ClusteredActorObject with TaskActorObject {
     extends TaskDescription with PipelineDeepCopyProtocol {
     val taskType: String = "PipelineDeepCopyTask"
     override def executionActorTypeName: String = typeName
+    override def summary: String = s"Copy pipeline $sourceId from $sourceVpcName to $targetVpcName (dryRun: $dryRun)."
   }
   case class StartPipelineCloning(securityGroupIdMappingByLocation: Map[AwsLocation, Map[String, String]]) extends PipelineDeepCopyProtocol
 
