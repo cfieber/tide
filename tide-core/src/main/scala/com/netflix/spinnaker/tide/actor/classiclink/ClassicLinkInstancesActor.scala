@@ -46,7 +46,7 @@ class ClassicLinkInstancesActor extends PersistentActor with ActorLogging {
           val unattachedInstances = allInstances.diff(attachedInstances)
           sender() ! InstancesNeedingClassicLinkAttached(vpcId, classicLinkSecurityGroupIds, unattachedInstances)
         case _ =>
-          log.info(s"""*!*!*! GetInstancesNeedingClassicLinkAttached requirements not met in $location.
+          log.info(s"""!**** GetInstancesNeedingClassicLinkAttached requirements not met in $location.
           classicLinkVpcId - $classicLinkVpcId
           classicLinkInstanceIds - ${classicLinkInstanceIds.isDefined}
           nonclassicLinkedLaunchConfigEc2ClassicInstanceIds - ${nonclassicLinkedLaunchConfigEc2ClassicInstanceIds.isDefined}

@@ -29,7 +29,6 @@ class ContinuousInitActor(clusterSharding: ClusterSharding,
 
   override def receive = {
     case t: Tick =>
-      log.info(s"*###*** ContinuousInitActor tick -  ${new Date().getTime} - $accountsToRegions")
       clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(accountsToRegions, classicLinkSecurityGroupNames)
       clusterSharding.shardRegion(TaskDirector.typeName) ! GetRunningTasks()
     case _ =>

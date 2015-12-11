@@ -76,9 +76,8 @@ class ActorSystemConfiguration {
       .withValue("akka.remote.netty.tcp.port", ConfigValueFactory.fromAnyRef(clusterPort))
       .withValue("akka.remote.netty.tcp.hostname", ConfigValueFactory.fromAnyRef(currentIp))
       .withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seeds.asJava))
-    log.info(s"***** Akka remote config: $config")
     config = config withFallback ConfigFactory.load()
-    log.info(s"***** Akka config: $config")
+    log.info(s"Akka config: $config")
     config
   }
 

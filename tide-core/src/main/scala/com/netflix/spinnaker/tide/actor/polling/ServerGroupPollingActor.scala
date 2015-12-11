@@ -16,6 +16,8 @@
 
 package com.netflix.spinnaker.tide.actor.polling
 
+import java.util.Date
+
 import akka.actor.Props
 import akka.contrib.pattern.ClusterSharding
 import com.amazonaws.services.autoscaling.model.{DescribeLaunchConfigurationsRequest, DescribeAutoScalingGroupsRequest}
@@ -104,6 +106,7 @@ class ServerGroupPollingActor() extends PollingActor {
             clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) !
               NonclassicLinkedLaunchConfigEc2ClassicInstanceIds(location, nonClassicLinkedLaunchConfigInstanceIds.distinct)
           }
+
         case _ =>
       }
   }

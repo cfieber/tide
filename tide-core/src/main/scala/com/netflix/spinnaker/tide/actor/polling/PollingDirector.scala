@@ -22,10 +22,8 @@ class PollingDirector extends PersistentActor with ActorLogging {
 
   private implicit val dispatcher = context.dispatcher
   val tick = context.system.scheduler.schedule(0 seconds, 15 seconds, self, Poll())
-  log.info(s"******* start poll ${new Date().getTime} - $pollInit")
 
   override def postStop() = {
-    log.info(s"******* cancel poll ${new Date().getTime}")
     tick.cancel()
   }
 
@@ -44,14 +42,11 @@ class PollingDirector extends PersistentActor with ActorLogging {
         updateState(init)
         context.become(polling(init))
       }
-    case poll: Poll =>
-      log.info(s"******* poll, but not yet polling ${new Date().getTime} - $pollInit")
     case _ =>
   }
 
   def polling(pollInit: PollInit): Receive = {
     case poll: Poll =>
-      log.info(s"******* poll ${new Date().getTime} - $pollInit")
       getShardCluster(PipelinePollingActor.typeName) ! PipelinePoll()
       val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, ClassicLinkInstanceIdPollingActor,
         SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
@@ -68,8 +63,6 @@ class PollingDirector extends PersistentActor with ActorLogging {
             classicLinkSecurityGroupNames)
         }
       }
-    case pollInit: PollInit =>
-      log.info(s"******* init but already polling ${new Date().getTime} - $pollInit")
     case _ =>
   }
 
