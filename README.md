@@ -41,4 +41,4 @@ AWS account [config is handled just like CloudDriver](https://github.com/spinnak
 You can find an [example config file](https://github.com/spinnaker/tide/blob/master/tide-web/config/tide.yml) in the codebase. Note that you will need to add specifics for the dependencies mentioned above and AWS account specifics.
 
 # Running
-```./gradlew bootrun```
+```./gradlew bootRun```
