@@ -1,6 +1,6 @@
 # Tide
 
-Tide can be used to compare and copy AWS auto scaling groups, launch configurations, load balancers and security groups across your AWS VPCs, regions and accounts. It may also be handy as a cache for avoiding AWS throttling. There is a task system that allows for resilient long running tasks.
+Tide can be used to compare and copy auto scaling groups, launch configurations, load balancers and security groups across your AWS VPCs, regions and accounts.
 
 # Features
 
@@ -18,8 +18,11 @@ Tide can migrate a pipeline to another VPC. Copying a pipeline to another region
 ## Comparisons
 Tide can show differences of attributes across multiple AWS resources. It can be useful to see a diff of all security groups with the same name in an account for example.
 
+## Cache
+It may also be handy as a cache for avoiding AWS throttling for reads of the resources mentioned above.
+
 ## Tasks
-Akka clustering and persistence are used to make the async task system resilient. Note that tide creates an Akka "cluster" from instances found in the same Spinnaker "cluster". Tasks can move between instances in the cluster. Tasks will also restart if all instances are terminated and then launched again.
+There is a task system that allows for long running tasks. Akka clustering and persistence are used to make the async task system resilient. Note that tide creates an Akka "cluster" from instances found in the same Spinnaker "cluster". Tasks can move between instances in the cluster. Tasks will also restart if all instances are terminated and then launched again.
 
 New task types are easy to implement and harness task system functionality such as the task lifecycle, subtasks, parallel execution, and logging. Migrations are a type of task. There is also a task type that can continuously attach classicLink to running instances that need it.
 
