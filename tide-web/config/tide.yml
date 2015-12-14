@@ -1,0 +1,66 @@
+
+netflix:
+  appinfo:
+    name: 'spinnaker-tide'
+
+default:
+   legacyServerPort: 7101
+
+#redis:
+#  host: localhost
+#  port: 6379
+#  timeout: 30000
+
+#cloudDriver:
+#  baseUrl: https://clouddriver.netflix.com/
+#
+#front50:
+#  baseUrl: https://front50.netflix.com/
+
+#classicLink:
+#  securityGroups:
+#    - classicLink
+
+services:
+  front50:
+    enabled: false # this keeps some unrelated clouddriver stuff from blowing up while we are using its AWS component
+
+akka:
+  cluster:
+    port: 2551
+
+swagger:
+  enabled: true
+  title: Tide API
+  description: Cloud migration and diffing tool.
+  contact: admin@host.net
+  patterns:
+    - .*task.*
+    - .*resource.*
+    - .*diff.*
+
+#aws:
+#  enabled: true
+#  defaultAssumeRole: role/spinnakerManaged
+#  accounts:
+#    - name: managing
+#      accountId: 123456789012
+#      regions:
+#        - name: us-east-1
+#        - name: us-west-1
+#    - name: managed
+#      accountId: 987654321098
+#      regions:
+#        - name: us-east-1
+#        - name: us-west-1
+#  defaultRegions:
+#   - name: us-east-1
+#     availabilityZones:
+#       - us-east-1a
+#       - us-east-1b
+#       - us-east-1c
+#   - name: us-west-1
+#     availabilityZones:
+#       - us-west-1a
+#       - us-west-1b
+#       - us-west-1c
