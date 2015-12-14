@@ -1,13 +1,13 @@
 # Tide
 
-Tide is useful for migrating and comparing AWS resources. It also has a task system that allows for resilient long running tasks. It may also be useful for avoiding AWS throttling as a cache. 
+Tide can be used to compare and copy AWS auto scaling groups, launch configurations, load balancers and security groups across your AWS VPCs, regions and accounts. It may also be handy as a cache for avoiding AWS throttling. There is a task system that allows for resilient long running tasks.
 
 # Features
 
 ## Migration
 
-#### Auto Scaling Groups
-Tide is capable of migrating an Auto Scaling Group to another location (account, region, and VPC). It performs a "deep copy" meaning that it will also copy attached launch configurations, security groups and load balancers if they don't already exist in the new location. It can handle cyclical references and any necessary naming changes (load balancers must have unique names across all VPCs in a region). Nothing will be deleted or modified, just new resources created. New ASGs will be disabled (not taking traffic) with zero instances. There is a "dry run" ability to show what will be created and why.
+#### Server Groups
+Spinnaker refers to an auto scaling group and all of its attached cloud resources as a server group. Tide is capable of migrating a server group to another location (account, region, and VPC). It performs a "deep copy" meaning that it will copy  the whole server group including attached launch configurations, load balancers and security groups if they don't already exist in the new location. It can handle cyclical references and any necessary naming changes (load balancers must have unique names across all VPCs in a region). Nothing will be deleted or modified but new resources may be created. New ASGs will be disabled (not taking traffic) with zero instances. There is a "dry run" ability to show what will be created and why.
 
 #### Security Groups and Load Balancers
 It is possible to migrate these without being attached to an ASG.
