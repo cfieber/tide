@@ -33,8 +33,9 @@ http://host/swagger-ui.html
 # Dependencies
 
 * Redis is used by Akka to persist events.
-* Edda (or AWS directly) is used for read operations.
-* [CloudDriver](https://github.com/spinnaker/clouddriver) is used for write operations.
+* Edda (or AWS directly) is used for AWS read operations.
+* [CloudDriver](https://github.com/spinnaker/clouddriver) is used for AWS write operations.
+* [Front50](https://github.com/spinnaker/front50) is used for pipeline management.
 
 # Configuration
 Tide is [configured like all other Spinnaker services](http://spinnaker.io/documentation/properties.html).
