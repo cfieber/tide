@@ -58,10 +58,14 @@ class VpcPollingActor extends PollingActor {
         vpcs <- vpcsFuture
         vpcClassicLinkLookup <- vpcClassicLinkLookupFuture
       } {
+        this.subnets = subnets
+
         val combinedVpcAttributes = vpcs.map { vpc =>
           val classicLinkEnabled: Boolean = vpcClassicLinkLookup.getOrElse(vpc.getVpcId, false)
           AwsConversion.vpcFrom(vpc, classicLinkEnabled)
         }
+        this.vpcs = combinedVpcAttributes
+
         val latestVpcs = LatestVpcs(location, combinedVpcAttributes, subnets)
         clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! latestVpcs
         clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! latestVpcs
