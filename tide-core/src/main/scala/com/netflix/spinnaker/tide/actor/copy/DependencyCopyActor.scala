@@ -143,18 +143,15 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
             case None => Nil
             case Some(latestState) =>
               persist(SourceSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
-              val target = resourceTracker.transformToTarget(resource)
-              if (resourceTracker.dependenciesNotYetFound.contains(target)) {
+              val targetResource = resourceTracker.transformToTarget(resource)
+              val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
+              if (resourceTracker.isNonexistentTarget(targetResource)) {
                 latestState.state.ipPermissions.foreach { ipPermission =>
                   ipPermission.userIdGroupPairs.foreach { userIdGroupPair =>
                     val referencedSourceSecurityGroup = resourceTracker.asSourceSecurityGroupReference(userIdGroupPair.groupName.get)
                     self ! RequiresSource(referencedSourceSecurityGroup, Option(resource.ref))
                   }
                 }
-              }
-              val targetResource = resourceTracker.transformToTarget(resource)
-              val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
-              if (resourceTracker.isNonexistentTarget(targetResource)) {
                 sendTaskEvent(Mutation(taskId, Create(), CreateAwsResource(targetResource.ref, referencingSource)))
               }
               if (task.dryRun) {
