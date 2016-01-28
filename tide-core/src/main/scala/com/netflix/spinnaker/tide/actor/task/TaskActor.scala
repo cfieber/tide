@@ -35,6 +35,11 @@ class TaskActor extends PersistentActor with ActorLogging {
     ClusterSharding.get(context.system).shardRegion(name)
   }
 
+  override def preRestart(reason: Throwable, message: Option[Any]) = {
+    reason.printStackTrace()
+    super.preRestart(reason, message)
+  }
+
   override def receiveCommand: Receive = {
     case event: ExecuteTask =>
       persist(event)(updateState(_))
@@ -68,7 +73,6 @@ class TaskActor extends PersistentActor with ActorLogging {
         updateState(taskComplete)
         parentTaskId.foreach(taskId => getShardCluster(TaskActor.typeName) ! ChildTaskComplete(taskId, event))
         getShardCluster(TaskDirector.typeName) ! event
-        getShardCluster(taskDescription.executionActorTypeName) ! event
       }
 
     case event: ChildTaskComplete =>
