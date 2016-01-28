@@ -25,14 +25,10 @@ sealed trait AwsProtocol extends Serializable
 
 object AwsApi {
 
-  def constructTargetSubnetType(sourceSubnetType: Option[String], targetVpcName: Option[String]): Option[String] = {
-    sourceSubnetType match {
-      case Some(subnetType) =>
-        val cleanSubnetType = subnetType.replaceAll("DEPRECATED_", "").replaceAll("-elb", "").replaceAll("-ec2", "")
-        targetVpcName match {
-          case Some(vpcName) => Option(s"${cleanSubnetType.split(" ").head} ($vpcName)")
-          case _ => None
-        }
+  def constructTargetSubnetType(sourceSubnetType: String, targetVpcName: Option[String]): Option[String] = {
+    val cleanSubnetType = sourceSubnetType.replaceAll("DEPRECATED_", "").replaceAll("-elb", "").replaceAll("-ec2", "")
+    targetVpcName match {
+      case Some(vpcName) => Option(s"${cleanSubnetType.split(" ").head} ($vpcName)")
       case _ => None
     }
   }
@@ -183,7 +179,7 @@ object AwsApi {
 
     def forVpc(vpcName: Option[String], vpcId: Option[String]): LoadBalancerState = {
       val securityGroups: Set[String] = if (vpcId.isDefined) this.securityGroups else Set()
-      this.copy(vpcId = vpcId, subnetType = constructTargetSubnetType(subnetType, vpcName),
+      this.copy(vpcId = vpcId, subnetType = constructTargetSubnetType(subnetType.getOrElse("external"), vpcName),
         securityGroups = securityGroups)
     }
 
@@ -266,7 +262,7 @@ object AwsApi {
       val newLoadBalancerNames = loadBalancerNames.map(LoadBalancerIdentity(_).
         forVpc(sourceVpcName, targetVpcName).loadBalancerName)
       this.copy(loadBalancerNames = newLoadBalancerNames, vpcName = targetVpcName,
-        subnetType = constructTargetSubnetType(subnetType, targetVpcName),
+        subnetType = constructTargetSubnetType(subnetType.getOrElse("internal"), targetVpcName),
         VPCZoneIdentifier = ""
       )
     }
