@@ -153,12 +153,14 @@ object AwsConversion {
       groupId = awsSecurityGroup.getGroupId,
       identity = SecurityGroupIdentity(awsSecurityGroup.getGroupName, Option(awsSecurityGroup.getVpcId)),
       state = SecurityGroupState(
+        ownerId = awsSecurityGroup.getOwnerId,
         description = awsSecurityGroup.getDescription,
         ipPermissions = awsIpPermissions.map { awsIpPermission =>
           val userIdGroupPairs = awsIpPermission.getUserIdGroupPairs.map { awsUserIdGroupPair =>
             UserIdGroupPairs(
               groupId = Option(awsUserIdGroupPair.getGroupId),
-              groupName = Option(awsUserIdGroupPair.getGroupName)
+              groupName = Option(awsUserIdGroupPair.getGroupName),
+              userId = awsUserIdGroupPair.getUserId
             )
           }.toSet
           val fromPort: Option[Int] = Option(awsIpPermission.getFromPort).map {_.toInt}

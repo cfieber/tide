@@ -31,6 +31,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   var vpcIds: VpcIds = _
   var taskId: String = _
   var resourceTracker: ResourceTracker = _
+  var complete = false
 
   val clusterSharding = ClusterSharding.get(context.system)
 
@@ -123,7 +124,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         }
       }
 
-    case event: SecurityGroupDetails =>
+    case event: SecurityGroupDetails if !complete =>
       resourceTracker.asResource(event.awsReference) match {
         case resource: TargetResource[SecurityGroupIdentity] =>
           event.latestState match {
@@ -148,8 +149,21 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               if (resourceTracker.isNonexistentTarget(targetResource)) {
                 latestState.state.ipPermissions.foreach { ipPermission =>
                   ipPermission.userIdGroupPairs.foreach { userIdGroupPair =>
-                    val referencedSourceSecurityGroup = resourceTracker.asSourceSecurityGroupReference(userIdGroupPair.groupName.get)
-                    self ! RequiresSource(referencedSourceSecurityGroup, Option(resource.ref))
+                    val groupName = event.awsReference.identity.groupName
+                    val ingressGroupName = userIdGroupPair.groupName.get
+                    if (userIdGroupPair.userId != "amazon-elb") {
+                      if (userIdGroupPair.userId != latestState.state.ownerId) {
+                        val msg = s"Cannot construct cross account security group ingress: (${latestState.state.ownerId}.$groupName to ${userIdGroupPair.userId}.$ingressGroupName)"
+                        if (task.dryRun) {
+                          sendTaskEvent(Log(taskId, msg))
+                        } else {
+                          throw new IllegalStateException(msg)
+                        }
+                      } else {
+                        val referencedSourceSecurityGroup = resourceTracker.asSourceSecurityGroupReference(ingressGroupName)
+                        self ! RequiresSource(referencedSourceSecurityGroup, Option(resource.ref))
+                      }
+                    }
                   }
                 }
                 sendTaskEvent(Mutation(taskId, Create(), CreateAwsResource(targetResource.ref, referencingSource)))
@@ -232,6 +246,8 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       case ExecuteTask(newTaskId, copyTask: DependencyCopyTask, _) =>
         taskId = newTaskId
         task = copyTask
+      case event: TaskComplete =>
+        complete = true
       case event: VpcIds =>
         vpcIds = event
         resourceTracker = ResourceTracker(task.source, task.target, vpcIds)
