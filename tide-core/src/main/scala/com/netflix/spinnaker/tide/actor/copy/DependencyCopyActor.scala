@@ -147,43 +147,29 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               val targetResource = resourceTracker.transformToTarget(resource)
               val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
               if (resourceTracker.isNonexistentTarget(targetResource)) {
-                latestState.state.ipPermissions.foreach { ipPermission =>
-                  ipPermission.userIdGroupPairs.foreach { userIdGroupPair =>
-                    val groupName = event.awsReference.identity.groupName
-                    val ingressGroupName = userIdGroupPair.groupName.get
-                    if (userIdGroupPair.userId != "amazon-elb") {
-                      if (userIdGroupPair.userId != latestState.state.ownerId) {
-                        val msg = s"Cannot construct cross account security group ingress: (${latestState.state.ownerId}.$groupName to ${userIdGroupPair.userId}.$ingressGroupName)"
-                        if (task.dryRun) {
-                          sendTaskEvent(Log(taskId, msg))
-                        } else {
-                          throw new IllegalStateException(msg)
-                        }
-                      } else {
-                        val referencedSourceSecurityGroup = resourceTracker.asSourceSecurityGroupReference(ingressGroupName)
-                        self ! RequiresSource(referencedSourceSecurityGroup, Option(resource.ref))
-                      }
-                    }
-                  }
+                if (task.source.vpcName.isDefined) {
+                  requireIngressSecurityGroups(latestState, targetResource.ref)
                 }
                 sendTaskEvent(Mutation(taskId, Create(), CreateAwsResource(targetResource.ref, referencingSource)))
               }
               if (task.dryRun) {
                 self ! FoundTarget(targetResource)
               } else {
-                if (!resourceTracker.hasSecuritySourceGroupIdFor(resource)) {
-                  if (resourceTracker.isNonexistentTarget(targetResource)) {
-                    val securityGroupStateWithoutLegacySuffixes = latestState.state.removeLegacySuffixesFromSecurityGroupIngressRules()
+                if (resourceTracker.isNonexistentTarget(targetResource) && !resourceTracker.hasSecuritySourceGroupIdFor(resource)) {
+                  val securityGroupStateWithoutLegacySuffixes = latestState.state.removeLegacySuffixesFromSecurityGroupIngressRules()
+                  val translatedIpPermissions: Set[IpPermission] = if (task.source.vpcName.isEmpty) {
+                    Set()
+                  } else {
                     val vpcTransformation = new VpcTransformations().getVpcTransformation(task.source.vpcName, task.target.vpcName)
-                    val translatedIpPermissions = vpcTransformation.translateIpPermissions(resource.ref, securityGroupStateWithoutLegacySuffixes)
                     vpcTransformation.log.toSet[String].foreach { msg =>
                       sendTaskEvent(Log(taskId, msg))
                     }
-                    val newSecurityGroupState = securityGroupStateWithoutLegacySuffixes.copy(ipPermissions = translatedIpPermissions)
-                    val upsert = UpsertSecurityGroup(newSecurityGroupState, overwrite = false)
-                    logCreateEvent(targetResource, referencingSource)
-                    clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(targetResource.ref, upsert)
+                    vpcTransformation.translateIpPermissions(resource.ref, securityGroupStateWithoutLegacySuffixes)
                   }
+                  val newSecurityGroupState = securityGroupStateWithoutLegacySuffixes.copy(ipPermissions = translatedIpPermissions)
+                  val upsert = UpsertSecurityGroup(newSecurityGroupState, overwrite = false)
+                  logCreateEvent(targetResource, referencingSource)
+                  clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(targetResource.ref, upsert)
                 }
               }
           }
@@ -231,6 +217,28 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         case other => Nil
       }
 
+  }
+
+  private def requireIngressSecurityGroups(latestState: SecurityGroupLatestState, referencedBy: AwsReference[SecurityGroupIdentity]): Unit = {
+    latestState.state.ipPermissions.foreach { ipPermission =>
+      ipPermission.userIdGroupPairs.foreach { userIdGroupPair =>
+        val groupName = referencedBy.identity.groupName
+        val ingressGroupName = userIdGroupPair.groupName.get
+        if (userIdGroupPair.userId != "amazon-elb") {
+          if (userIdGroupPair.userId != latestState.state.ownerId) {
+            val msg = s"Cannot construct cross account security group ingress: (${latestState.state.ownerId}.$groupName to ${userIdGroupPair.userId}.$ingressGroupName)"
+            if (task.dryRun) {
+              sendTaskEvent(Log(taskId, msg))
+            } else {
+              throw new IllegalStateException(msg)
+            }
+          } else {
+            val referencedSourceSecurityGroup = resourceTracker.asSourceSecurityGroupReference(ingressGroupName)
+            self ! RequiresSource(referencedSourceSecurityGroup, Option(referencedBy))
+          }
+        }
+      }
+    }
   }
 
   def logCreateEvent(targetResource: TargetResource[_ <: AwsIdentity], referencingSource: Option[AwsReference[_]]): Unit = {
