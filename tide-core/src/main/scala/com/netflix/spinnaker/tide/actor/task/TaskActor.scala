@@ -2,8 +2,9 @@ package com.netflix.spinnaker.tide.actor.task
 
 import java.util.Date
 
-import akka.actor.{ActorLogging, ActorRef, Props}
+import akka.actor._
 import akka.contrib.pattern.ClusterSharding
+import akka.contrib.pattern.ShardRegion.Passivate
 import akka.pattern.ask
 import akka.persistence.{PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
@@ -19,6 +20,9 @@ class TaskActor extends PersistentActor with ActorLogging {
   override def persistenceId: String = self.path.name
 
   implicit val timeout = Timeout(5 seconds)
+
+  // passivate the entity when no activity
+  context.setReceiveTimeout(120 seconds)
 
   var taskId: String = _
   var parentTaskId: Option[String] = _
@@ -49,6 +53,11 @@ class TaskActor extends PersistentActor with ActorLogging {
 
     case event: ExecuteChildTasks =>
       persist(event)(updateState(_))
+
+    case ReceiveTimeout =>
+      if (taskComplete.nonEmpty) {
+        context.parent ! Passivate(stopMessage = PoisonPill)
+      }
 
     case event: Log =>
       persist(event) { it =>
