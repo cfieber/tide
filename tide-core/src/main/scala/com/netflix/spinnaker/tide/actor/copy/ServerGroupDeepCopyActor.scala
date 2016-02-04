@@ -21,6 +21,7 @@ import akka.contrib.pattern.ClusterSharding
 import akka.pattern.ask
 import akka.persistence.{PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
+import com.netflix.frigga.Names
 import com.netflix.spinnaker.tide.actor.TaskActorObject
 import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor
 import com.netflix.spinnaker.tide.actor.copy.DependencyCopyActor.DependencyCopyTask
@@ -60,6 +61,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
   }
 
   var serverGroupState: ServerGroupLatestState = _
+  var appName: String = _
 
   override def preRestart(reason: Throwable, message: Option[Any]) = {
     reason.printStackTrace()
@@ -103,7 +105,8 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
           throw new IllegalArgumentException(s"Cannot find server group '${event.awsReference}'.")
         case Some(latestState) =>
           serverGroupState = latestState
-          val requiredSecurityGroups = latestState.launchConfiguration.securityGroups
+          appName = Names.parseName(event.awsReference.identity.autoScalingGroupName).getApp
+          val requiredSecurityGroups = latestState.launchConfiguration.securityGroups + appName
           val sourceLoadBalancerNames = latestState.autoScalingGroup.loadBalancerNames
           if (requiredSecurityGroups.isEmpty && sourceLoadBalancerNames.isEmpty) {
             self ! StartServerGroupCloning()
@@ -120,7 +123,8 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
       if (cloneServerGroupTaskReference.isEmpty) {
         val sourceVpcName = serverGroupState.autoScalingGroup.vpcName
         val newAutoScalingGroup = serverGroupState.autoScalingGroup.forVpc(sourceVpcName, task.target.vpcName).withCapacity(0)
-        val newLaunchConfiguration = serverGroupState.launchConfiguration.dropSecurityGroupNameLegacySuffixes
+        val newLaunchConfiguration = serverGroupState.launchConfiguration.dropSecurityGroupNameLegacySuffixes.copy(
+          securityGroups = serverGroupState.launchConfiguration.securityGroups + appName)
         val cloneServerGroup = CloneServerGroup(newAutoScalingGroup, newLaunchConfiguration, startDisabled = true)
         if (task.dryRun) {
           val nextAsgIdentity = task.source.identity.nextGroup
