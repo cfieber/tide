@@ -194,10 +194,10 @@ case class ClusterVpcMigrator(sourceVpcName: Option[String], targetVpcName: Stri
                               securityGroupIdMappingByLocation: Map[AwsLocation, Map[String, String]]) extends ClusterVisitor {
   def visit(cluster: Cluster): Cluster = {
     val location = AwsLocation(cluster.getAccount, cluster.getRegion)
-    val subnetType = cluster.getSubnetType.getOrElse("internal")
-    val vpcName = AwsApi.getVpcNameFromSubnetType(Option(subnetType))
+    val subnetType = cluster.getSubnetType
+    val vpcName = AwsApi.getVpcNameFromSubnetType(subnetType)
     if (vpcName == sourceVpcName) {
-      val newSubnetType = AwsApi.constructTargetSubnetType(subnetType, Option(targetVpcName))
+      val newSubnetType = AwsApi.constructTargetSubnetType(subnetType.getOrElse("internal"), Option(targetVpcName))
       val newLoadBalancers = cluster.getLoadBalancersNames.map(LoadBalancerIdentity(_)
         .forVpc(sourceVpcName, Option(targetVpcName)).loadBalancerName)
       val newSecurityGroups = securityGroupIdMappingByLocation.get(location) match {
