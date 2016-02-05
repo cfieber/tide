@@ -61,7 +61,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   override def receiveCommand: Receive = {
 
     case ContinueTask(ExecuteTask(_, task: DependencyCopyTask, _)) =>
-      checkForCreatedResources = scheduler.schedule(0 seconds, 25 seconds, self, CheckCompletion())
+      checkForCreatedResources = scheduler.schedule(0 seconds, 60 seconds, self, CheckCompletion())
 
     case event @ ExecuteTask(_, _: DependencyCopyTask, _) =>
       persist(event) { e =>
@@ -74,7 +74,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       val targetVpcId = findVpcId(task.target.vpcName, latestVpcs.vpcs)
       persist(VpcIds(sourceVpcId, targetVpcId)) { it =>
         updateState(it)
-        checkForCreatedResources = scheduler.schedule(25 seconds, 25 seconds, self, CheckCompletion())
+        checkForCreatedResources = scheduler.schedule(60 seconds, 60 seconds, self, CheckCompletion())
         task.requiredSecurityGroupNames.foreach { it =>
           self ! RequiresSource(resourceTracker.asSourceSecurityGroupReference(it), None)
         }
@@ -141,7 +141,9 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
           clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(sourceResource.ref, GetSecurityGroup())
         case resource: SourceResource[SecurityGroupIdentity] =>
           val desiredState: SecurityGroupState = event.latestState match {
-            case None => SecurityGroupState(resource.ref.identity.groupName, Set(), "")
+            case None =>
+              persist(SourceSecurityGroup(resource, "nonexistant"))(it => updateState(it))
+              SecurityGroupState(resource.ref.identity.groupName, Set(), "")
             case Some(latestState) =>
               persist(SourceSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
               latestState.state
