@@ -25,11 +25,11 @@ class TaskActor extends PersistentActor with ActorLogging {
   context.setReceiveTimeout(120 seconds)
 
   var taskId: String = _
-  var parentTaskId: Option[String] = _
+  var parentTaskId: Option[String] = None
   var taskDescription: TaskDescription = _
   var history: List[Log] = Nil
   var mutations: Set[Mutation] = Set()
-  var taskComplete: Option[TaskComplete] = _
+  var taskComplete: Option[TaskComplete] = None
 
   var childTasks: Map[String, TaskDescription] = Map()
   var childTaskGroups: List[Seq[String]] = Nil
