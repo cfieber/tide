@@ -18,7 +18,7 @@ package com.netflix.spinnaker.tide.actor.service
 
 import akka.actor.Props
 import com.netflix.spinnaker.tide.actor.SingletonActorObject
-import com.netflix.spinnaker.tide.actor.service.Front50Actor.{FoundPipelines, GetPipelines, AddPipelines}
+import com.netflix.spinnaker.tide.actor.service.Front50Actor.{FoundPipeline, GetPipelines, AddPipelines}
 import com.netflix.spinnaker.tide.model.Front50Service
 import com.netflix.spinnaker.tide.model.Front50Service.{Pipeline, PipelineState}
 
@@ -28,7 +28,9 @@ class Front50Actor extends RetrofitServiceActor[Front50Service] {
     case msg: AddPipelines =>
       service.addPipelines(msg.pipelines)
     case msg: GetPipelines =>
-      sender ! FoundPipelines(service.getAllPipelines)
+      service.getAllPipelines.foreach{ pipeline =>
+        sender ! FoundPipeline(pipeline)
+      }
   }
 
 }
@@ -44,7 +46,7 @@ object Front50Actor extends SingletonActorObject {
   }
 
   case class GetPipelines() extends Front50Protocol
-  case class FoundPipelines(resources: Seq[Pipeline]) extends Front50Protocol
+  case class FoundPipeline(pipeline: Pipeline) extends Front50Protocol
   case class AddPipelines(pipelines: Seq[PipelineState]) extends Front50Protocol
 
 }
