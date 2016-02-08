@@ -22,29 +22,19 @@ import com.netflix.spinnaker.tide.actor.aws.PipelineActor
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor.PipelineDetails
 import com.netflix.spinnaker.tide.actor.polling.PollingActor.Poll
 import com.netflix.spinnaker.tide.actor.service.Front50Actor
-import com.netflix.spinnaker.tide.actor.service.Front50Actor.{FoundPipelines, GetPipelines}
+import com.netflix.spinnaker.tide.actor.service.Front50Actor.{FoundPipeline, GetPipelines}
 
 class PipelinePollingActor() extends PollingActor {
 
   val clusterSharding: ClusterSharding = ClusterSharding.get(context.system)
 
-  var currentIds: Seq[String] = Nil
-
   override def receive: Receive = {
     case msg: Poll =>
       clusterSharding.shardRegion(Front50Actor.typeName) ! GetPipelines()
 
-    case msg: FoundPipelines =>
-      val pipelines = msg.resources
-      val oldIds = currentIds
-      currentIds = pipelines.map(_.id)
-      val removedIds = oldIds.toSet -- currentIds.toSet
-      removedIds.foreach { identity =>
-        clusterSharding.shardRegion(PipelineActor.typeName) ! PipelineDetails(identity, None)
-      }
-      pipelines.foreach { pipeline =>
-        clusterSharding.shardRegion(PipelineActor.typeName) ! PipelineDetails(pipeline.id, Option(pipeline.state))
-      }
+    case msg: FoundPipeline =>
+      val pipeline = msg.pipeline
+      clusterSharding.shardRegion(PipelineActor.typeName) ! PipelineDetails(pipeline.id, Option(pipeline.state))
   }
 
 }
