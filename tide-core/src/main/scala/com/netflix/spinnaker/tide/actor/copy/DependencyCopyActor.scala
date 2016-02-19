@@ -151,9 +151,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
           val targetResource = resourceTracker.transformToTarget(resource)
           val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
           if (resourceTracker.isNonexistentTarget(targetResource)) {
-            if (task.source.vpcName.isDefined) {
-              requireIngressSecurityGroups(desiredState, targetResource.ref)
-            }
+            requireIngressSecurityGroups(desiredState, targetResource.ref)
             sendTaskEvent(Mutation(taskId, Create(), CreateAwsResource(targetResource.ref, referencingSource)))
             if (task.dryRun) {
               self ! FoundTarget(targetResource)
