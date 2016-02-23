@@ -95,9 +95,12 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
     val cloudDriverActor = clusterSharding.shardRegion(CloudDriverActor.typeName)
     latestState match {
       case None =>
-        val stateWithoutIngress = upsertSecurityGroup.state.copy(ipPermissions = Set())
-        val eventWithoutIngress = upsertSecurityGroup.copy(state = stateWithoutIngress)
-        cloudDriverActor ! AwsResourceProtocol(awsReference, eventWithoutIngress)
+        if (upsertSecurityGroup.state.ipPermissions.nonEmpty) {
+          val stateWithoutIngress = upsertSecurityGroup.state.copy(ipPermissions = Set())
+          val upsertWithoutIngress = upsertSecurityGroup.copy(state = stateWithoutIngress)
+          cloudDriverActor ! AwsResourceProtocol(awsReference, upsertWithoutIngress)
+        }
+        cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
       case Some(latest) if upsertSecurityGroup.overwrite || latest.state.ipPermissions.isEmpty =>
         val latestOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, latest.state)
         val upsertOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, upsertSecurityGroup.state)

@@ -89,7 +89,7 @@ case class ResourceTracker(source: VpcLocation, target: VpcLocation, vpcIds: Vpc
     val sourceSecurityGroupIdentities = sourceIdentities.filter(_.isInstanceOf[SecurityGroupIdentity]).
       asInstanceOf[Seq[SecurityGroupIdentity]]
     val allSourceSecurityGroupNames = sourceSecurityGroupIdentities.map(_.groupName)
-    val seenSourceSecurityGroupNames = sourceSecurityGroupToId.keys.toList
+    val seenSourceSecurityGroupNames = sourceSecurityGroupToId.keys.map(_.ref.identity.groupName).toList
     allSourceSecurityGroupNames.diff(seenSourceSecurityGroupNames).map { unseenSourceSecurityGroupName =>
       asSourceSecurityGroupReference(unseenSourceSecurityGroupName).ref
     }
@@ -107,6 +107,12 @@ case class ResourceTracker(source: VpcLocation, target: VpcLocation, vpcIds: Vpc
     sourceSecurityGroupToId.keySet.map { sourceResource =>
       val targetResource = transformToTarget(sourceResource)
       sourceSecurityGroupToId(sourceResource) -> targetSecurityGroupToId(targetResource)
+    }.toMap
+  }
+
+  def targetSecurityGroupNameToId: Map[String, String] = {
+    targetSecurityGroupToId.keySet.map { targetResource =>
+      targetResource.ref.identity.groupName -> targetSecurityGroupToId(targetResource)
     }.toMap
   }
 
