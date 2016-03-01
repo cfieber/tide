@@ -114,10 +114,10 @@ object CloudDriverService {
     val operationTypeName = "upsertSecurityGroupDescription"
   }
 
-  case class SecurityGroupIngress(id: String, @JsonProperty("type") protocol: String, startPort: Option[Int], endPort: Option[Int])
+  case class SecurityGroupIngress(name: String, @JsonProperty("type") protocol: String, startPort: Option[Int], endPort: Option[Int])
   object SecurityGroupIngress {
-    def from(id: String, ipPermission: IpPermission): SecurityGroupIngress = {
-      SecurityGroupIngress(id, ipPermission.ipProtocol, ipPermission.fromPort, ipPermission.toPort)
+    def from(name: String, ipPermission: IpPermission): SecurityGroupIngress = {
+      SecurityGroupIngress(name, ipPermission.ipProtocol, ipPermission.fromPort, ipPermission.toPort)
     }
   }
 

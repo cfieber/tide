@@ -158,15 +158,11 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
             } else {
               if (!resourceTracker.hasSecuritySourceGroupIdFor(resource)) {
                 val securityGroupStateWithoutLegacySuffixes = desiredState.removeLegacySuffixesFromSecurityGroupIngressRules()
-                val translatedIpPermissions: Set[IpPermission] = if (task.source.vpcName.isEmpty) {
-                  Set()
-                } else {
-                  val vpcTransformation = new VpcTransformations().getVpcTransformation(task.source.vpcName, task.target.vpcName)
-                  vpcTransformation.log.toSet[String].foreach { msg =>
-                    sendTaskEvent(Log(taskId, msg))
-                  }
-                  vpcTransformation.translateIpPermissions(resource.ref, securityGroupStateWithoutLegacySuffixes)
+                val vpcTransformation = new VpcTransformations().getVpcTransformation(task.source.vpcName, task.target.vpcName)
+                vpcTransformation.log.toSet[String].foreach { msg =>
+                  sendTaskEvent(Log(taskId, msg))
                 }
+                val translatedIpPermissions = vpcTransformation.translateIpPermissions(resource.ref, securityGroupStateWithoutLegacySuffixes)
                 val newSecurityGroupState = securityGroupStateWithoutLegacySuffixes.copy(ipPermissions = translatedIpPermissions)
                 val upsert = UpsertSecurityGroup(newSecurityGroupState, overwrite = false)
                 logCreateEvent(targetResource, referencingSource)

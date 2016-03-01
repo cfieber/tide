@@ -82,7 +82,7 @@ object ConstructCloudDriverOperations {
     var ipIngress: Set[IpIngress] = Set()
     securityGroupState.ipPermissions.foreach { ipPermission =>
       ipPermission.userIdGroupPairs.foreach { userIdGroupPair =>
-        securityGroupIngress += SecurityGroupIngress.from(userIdGroupPair.groupId.get, ipPermission)
+        securityGroupIngress += SecurityGroupIngress.from(userIdGroupPair.groupName.get, ipPermission)
       }
       ipPermission.ipRanges.foreach(ipIngress += IpIngress.from(_, ipPermission))
     }
