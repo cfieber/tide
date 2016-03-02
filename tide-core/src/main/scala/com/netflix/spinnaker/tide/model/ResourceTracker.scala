@@ -110,6 +110,12 @@ case class ResourceTracker(source: VpcLocation, target: VpcLocation, vpcIds: Vpc
     }.toMap
   }
 
+  def targetSecurityGroupNameToId: Map[String, String] = {
+    targetSecurityGroupToId.keySet.map { targetResource =>
+      targetResource.ref.identity.groupName -> targetSecurityGroupToId(targetResource)
+    }.toMap
+  }
+
   def asResource[T <: AwsIdentity](ref: AwsReference[T]): Resource[T] = {
     ref.identity match {
       case identity: SecurityGroupIdentity =>
