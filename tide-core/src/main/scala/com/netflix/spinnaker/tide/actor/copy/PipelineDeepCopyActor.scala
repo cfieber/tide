@@ -106,7 +106,7 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
               val result = taskSuccess.result.asInstanceOf[DependencyCopyTaskResult]
               val location = description.source.location
               val mappingForLocation: Map[String, String] = securityGroupIdMappingByLocation.getOrElse(location, Map())
-              val mergedMappingForLocation = mappingForLocation ++ result.securityGroupIdSourceToTarget ++ result.targetSecurityGroupNameToId
+              val mergedMappingForLocation = mappingForLocation ++ result.securityGroupIdSourceToTarget
               securityGroupIdMappingByLocation += (location -> mergedMappingForLocation)
             }
             self ! StartPipelineCloning(securityGroupIdMappingByLocation)
@@ -202,11 +202,7 @@ case class ClusterVpcMigrator(sourceVpcName: Option[String], targetVpcName: Stri
         .forVpc(sourceVpcName, Option(targetVpcName)).loadBalancerName)
       val newSecurityGroups = securityGroupIdMappingByLocation.get(location) match {
         case Some(securityGroupIdsSourceToTarget) =>
-          val targetIds = cluster.getSecurityGroupIds.map(securityGroupIdsSourceToTarget.getOrElse(_, "nonexistant"))
-          securityGroupIdsSourceToTarget.get(cluster.getApplication) match {
-            case None => targetIds
-            case Some(id) => targetIds + id
-          }
+          cluster.getSecurityGroupIds.map(securityGroupIdsSourceToTarget.getOrElse(_, "nonexistant"))
         case None =>
           cluster.getSecurityGroupIds
       }
@@ -223,13 +219,13 @@ case class ClusterDependencyCollector() extends ClusterVisitor {
 
   def visit(cluster: Cluster): Cluster = {
     val clusterDependencies = ClusterDependencies(cluster.getAccount, cluster.getRegion, cluster.getSubnetType,
-      cluster.getLoadBalancersNames, cluster.getSecurityGroupIds, cluster.getApplication)
+      cluster.getLoadBalancersNames, cluster.getSecurityGroupIds)
     dependencies ::= clusterDependencies
     cluster
   }
 }
 
 case class ClusterDependencies(account: String, region: String, subnetType: Option[String],
-                               loadBalancersNames: Set[String], securityGroupIds: Set[String], appName: String)
+                               loadBalancersNames: Set[String], securityGroupIds: Set[String])
 
 

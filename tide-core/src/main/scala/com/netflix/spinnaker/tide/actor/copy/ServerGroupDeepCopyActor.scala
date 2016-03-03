@@ -113,7 +113,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
           } else {
             val sourceVpcLocation = VpcLocation(task.source.location, latestState.autoScalingGroup.vpcName)
             val dependencyCopyTask = DependencyCopyTask(sourceVpcLocation, task.target,
-              requiredSecurityGroups, sourceLoadBalancerNames, Option(appName), dryRun = task.dryRun)
+              requiredSecurityGroups, sourceLoadBalancerNames, dryRun = task.dryRun)
             startChildTasks(ChildTaskDescriptions(taskId, List(dependencyCopyTask)))
           }
       }

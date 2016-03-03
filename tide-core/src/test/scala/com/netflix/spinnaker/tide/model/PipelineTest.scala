@@ -97,8 +97,7 @@ class PipelineTest extends FlatSpec with GivenWhenThen with DiagrammedAssertions
 
     Then("dependencies are collected")
     val expectedDependencies = List(
-      ClusterDependencies("prod", "us-west-1", Option("internal"), Set("testApp-frontend"), Set("sg-1234", "sg-abcd"),
-        "testApp")
+      ClusterDependencies("prod", "us-west-1", Option("internal"), Set("testApp-frontend"), Set("sg-1234", "sg-abcd"))
     )
     assert(visitedPipeline == pipeline)
     assert(collector.dependencies == expectedDependencies)
