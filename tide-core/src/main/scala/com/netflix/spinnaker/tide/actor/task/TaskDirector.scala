@@ -18,7 +18,7 @@ package com.netflix.spinnaker.tide.actor.task
 
 import akka.actor.{ActorLogging, ActorRef, Props}
 import akka.contrib.pattern.ClusterSharding
-import akka.persistence.{PersistentActor, RecoveryCompleted}
+import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.SingletonActorObject
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
@@ -83,6 +83,7 @@ class TaskDirector extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case event: RecoveryCompleted =>
       currentExecutionsByTaskId.foreach {
         case (id, executeTask) =>

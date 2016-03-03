@@ -89,13 +89,6 @@ object Front50Service {
       }
     }
 
-    def getApplication: String = {
-      attributes("application").asInstanceOf[String]
-    }
-    def setAppName(application: String): Cluster = {
-      Cluster(attributes + ("application" -> application))
-    }
-
     def getLoadBalancersNames = {
       attributes.getOrElse("loadBalancers", Nil).asInstanceOf[Seq[String]].toSet
     }

@@ -2,7 +2,7 @@ package com.netflix.spinnaker.tide.actor.classiclink
 
 import akka.actor.{Props, Cancellable, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
-import akka.persistence.{RecoveryCompleted, PersistentActor}
+import akka.persistence.{RecoveryFailure, RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.TaskActorObject
 import com.netflix.spinnaker.tide.actor.classiclink.AttachClassicLinkActor.{EndOfLife, AttachClassicLinkTask}
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.{GetInstancesNeedingClassicLinkAttached, InstancesNeedingClassicLinkAttached}
@@ -100,6 +100,7 @@ class AttachClassicLinkActor extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case RecoveryCompleted =>
     case event =>
       updateState(event)

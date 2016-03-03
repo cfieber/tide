@@ -2,7 +2,7 @@ package com.netflix.spinnaker.tide.actor.copy
 
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
-import akka.persistence.{PersistentActor, RecoveryCompleted}
+import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.TaskActorObject
 import com.netflix.spinnaker.tide.actor.aws.{LoadBalancerActor, SecurityGroupActor}
@@ -75,14 +75,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       persist(VpcIds(sourceVpcId, targetVpcId)) { it =>
         updateState(it)
         checkForCreatedResources = scheduler.schedule(60 seconds, 60 seconds, self, CheckCompletion())
-        val requiredSecurityGroupNames = (targetVpcId, task.appName) match {
-          case (Some(_), Some(appName)) =>
-            val appSecurityGroupNames = Seq(appName, appSecurityGroupForElbName(appName))
-            task.requiredSecurityGroupNames ++ appSecurityGroupNames
-          case _ =>
-            task.requiredSecurityGroupNames
-        }
-        requiredSecurityGroupNames.foreach { it =>
+        task.requiredSecurityGroupNames.foreach { it =>
           self ! RequiresSource(resourceTracker.asSourceSecurityGroupReference(it), None)
         }
         task.sourceLoadBalancerNames.foreach { it =>
@@ -150,15 +143,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
           val desiredState: SecurityGroupState = event.latestState match {
             case None =>
               persist(SourceSecurityGroup(resource, "nonexistant"))(it => updateState(it))
-              val groupName = resource.ref.identity.groupName
-              task.appName match {
-                case Some(appName) if groupName == appName =>
-                  constructAppSecurityGroup(appName)
-                case Some(appName) if groupName == appSecurityGroupForElbName(appName) =>
-                  constructAppSecurityGroupForElb(appName)
-                case _ =>
-                  SecurityGroupState(resource.ref.identity.groupName, Set(), "")
-              }
+              SecurityGroupState(resource.ref.identity.groupName, Set(), "")
             case Some(latestState) =>
               persist(SourceSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
               latestState.state
@@ -218,72 +203,18 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
                   self ! FoundTarget(targetResource)
                 } else {
                   if (resourceTracker.isNonexistentTarget(targetResource)) {
-                    val loadBalancerStateForTargetVpc = latestState.state.forVpc(task.target.vpcName, vpcIds.target)
+                    val newLoadBalancerState = latestState.state.forVpc(task.target.vpcName, vpcIds.target)
                       .removeLegacySuffixesFromSecurityGroups()
-                    val newLoadBalancerState = (vpcIds.target, task.appName) match {
-                      case (Some(_), Some(appName)) =>
-                        val securityGroupsIncludingAppElbSecurityGroup = loadBalancerStateForTargetVpc.securityGroups +
-                          appSecurityGroupForElbName(appName)
-                        loadBalancerStateForTargetVpc.copy(securityGroups = securityGroupsIncludingAppElbSecurityGroup)
-                      case _ => loadBalancerStateForTargetVpc
-                    }
                     val upsert = UpsertLoadBalancer(newLoadBalancerState, overwrite = false)
                     logCreateEvent(targetResource, referencingSource)
                     clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(targetResource.ref, upsert)
                   }
                 }
               }
-            }
+          }
         case other => Nil
       }
 
-  }
-
-  private def appSecurityGroupForElbName(appName: String) = s"$appName-elb"
-
-  private def constructAppSecurityGroup(appName: String): SecurityGroupState = {
-    val userIdGroupPairs = Set (
-      UserIdGroupPairs (
-        groupId = None,
-        groupName = Some (appSecurityGroupForElbName(appName)),
-        userId = ""
-      )
-    )
-    SecurityGroupState (appName, Set (
-      IpPermission (
-        fromPort = Some (7001),
-        toPort = Some (7001),
-        ipProtocol = "tcp",
-        ipRanges = Set(),
-        userIdGroupPairs = userIdGroupPairs
-      ),
-      IpPermission (
-        fromPort = Some (7002),
-        toPort = Some (7002),
-        ipProtocol = "tcp",
-        ipRanges = Set(),
-        userIdGroupPairs = userIdGroupPairs
-      )
-    ), "")
-  }
-
-  private def constructAppSecurityGroupForElb(appName: String): SecurityGroupState = {
-    SecurityGroupState(appSecurityGroupForElbName(appName), Set(
-      IpPermission(
-        fromPort = Some(80),
-        toPort = Some(80),
-        ipProtocol = "tcp",
-        ipRanges = Set("0.0.0.0/0"),
-        userIdGroupPairs = Set()
-      ),
-      IpPermission(
-        fromPort = Some(443),
-        toPort = Some(443),
-        ipProtocol = "tcp",
-        ipRanges = Set("0.0.0.0/0"),
-        userIdGroupPairs = Set()
-      )
-    ), "")
   }
 
   private def requireIngressSecurityGroups(securityGroupState: SecurityGroupState, referencedBy: AwsReference[SecurityGroupIdentity]): Unit = {
@@ -297,7 +228,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
             if (task.dryRun) {
               sendTaskEvent(Log(taskId, msg))
             } else {
-              throw new IllegalStateException(msg)
+              sendTaskEvent(TaskFailure(taskId, task, msg))
             }
           } else {
             val referencedSourceSecurityGroup = resourceTracker.asSourceSecurityGroupReference(ingressGroupName)
@@ -342,6 +273,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case RecoveryCompleted =>
     case event =>
       updateState(event)
@@ -349,8 +281,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
 
   def checkCompletion() = {
     if (resourceTracker.hasResolvedEverythingRequired) {
-      self ! TaskSuccess(taskId, task, DependencyCopyTaskResult(resourceTracker.securityGroupIdsSourceToTarget,
-        resourceTracker.targetSecurityGroupNameToId))
+      self ! TaskSuccess(taskId, task, DependencyCopyTaskResult(resourceTracker.securityGroupIdsSourceToTarget))
     }
   }
 
@@ -377,13 +308,11 @@ sealed trait DependencyCopyProtocol extends Serializable
 object DependencyCopyActor extends TaskActorObject {
   val props = Props[DependencyCopyActor]
 
-  case class DependencyCopyTaskResult(securityGroupIdSourceToTarget: Map[String, String],
-                                      targetSecurityGroupNameToId: Map[String, String]) extends TaskResult with DependencyCopyProtocol
+  case class DependencyCopyTaskResult(securityGroupIdSourceToTarget: Map[String, String]) extends TaskResult with DependencyCopyProtocol
   case class DependencyCopyTask(source: VpcLocation,
                                 target: VpcLocation,
                                 requiredSecurityGroupNames: Set[String],
                                 sourceLoadBalancerNames: Set[String],
-                                appName: Option[String] = None,
                                 dryRun: Boolean = false) extends TaskDescription with DependencyCopyProtocol {
     val taskType: String = "DependencyCopyTask"
     val executionActorTypeName: String = typeName

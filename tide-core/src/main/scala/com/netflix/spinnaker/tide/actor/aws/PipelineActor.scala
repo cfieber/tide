@@ -18,7 +18,7 @@ package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor.{PoisonPill, ReceiveTimeout, ActorLogging, Props}
 import akka.contrib.pattern.ShardRegion._
-import akka.persistence.{PersistentActor, RecoveryCompleted}
+import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{PipelineDetails, GetPipeline}
 import com.netflix.spinnaker.tide.model.Front50Service.PipelineState
@@ -54,6 +54,7 @@ class PipelineActor extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case RecoveryCompleted => Nil
     case event: Any =>
       updateState(event)

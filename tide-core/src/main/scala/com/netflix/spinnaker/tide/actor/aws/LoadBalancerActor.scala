@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide.actor.aws
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
-import akka.persistence.{RecoveryCompleted, PersistentActor}
+import akka.persistence.{RecoveryFailure, RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.aws.LoadBalancerActor.{LoadBalancerComparableAttributes, DiffLoadBalancer}
 import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor.DiffServerGroup
@@ -121,6 +121,7 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case RecoveryCompleted => Nil
     case event: Any =>
       updateState(event)

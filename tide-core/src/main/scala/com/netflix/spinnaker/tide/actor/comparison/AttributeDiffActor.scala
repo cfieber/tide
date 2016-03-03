@@ -1,7 +1,7 @@
 package com.netflix.spinnaker.tide.actor.comparison
 
 import akka.actor.{Props, ActorLogging}
-import akka.persistence.{RecoveryCompleted, PersistentActor}
+import akka.persistence.{RecoveryFailure, RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.aws.LoadBalancerActor.DiffLoadBalancer
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor.{DiffAttributes, GetDiff}
@@ -32,6 +32,7 @@ class AttributeDiffActor extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case event: DiffAttributes[_] =>
       updateState(event)
   }
