@@ -4,7 +4,7 @@ import java.util.Date
 
 import akka.actor.{ActorRef, Props, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
-import akka.persistence.{RecoveryCompleted, PersistentActor}
+import akka.persistence.{RecoveryFailure, RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.clouddriver.aws.security.config.CredentialsConfig
 import com.netflix.spinnaker.clouddriver.aws.security.config.CredentialsConfig.Account
 import com.netflix.spinnaker.tide.actor.SingletonActorObject
@@ -70,6 +70,7 @@ class PollingDirector extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case event: RecoveryCompleted =>
       pollInit.foreach { init =>
         context.become(polling(init))

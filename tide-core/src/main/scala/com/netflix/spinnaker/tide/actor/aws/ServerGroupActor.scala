@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide.actor.aws
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
-import akka.persistence.PersistentActor
+import akka.persistence.{RecoveryFailure, PersistentActor}
 import com.netflix.frigga.Names
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.aws.ServerGroupActor.{DiffServerGroup, ServerGroupComparableAttributes}
@@ -90,6 +90,7 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case event: ServerGroupEvent =>
       updateState(event)
   }

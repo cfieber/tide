@@ -2,7 +2,7 @@ package com.netflix.spinnaker.tide.actor.copy
 
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
-import akka.persistence.{PersistentActor, RecoveryCompleted}
+import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.TaskActorObject
 import com.netflix.spinnaker.tide.actor.aws.{LoadBalancerActor, SecurityGroupActor}
@@ -228,7 +228,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
             if (task.dryRun) {
               sendTaskEvent(Log(taskId, msg))
             } else {
-              throw new IllegalStateException(msg)
+              sendTaskEvent(TaskFailure(taskId, task, msg))
             }
           } else {
             val referencedSourceSecurityGroup = resourceTracker.asSourceSecurityGroupReference(ingressGroupName)
@@ -273,6 +273,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case RecoveryCompleted =>
     case event =>
       updateState(event)

@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide.actor.copy
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import akka.pattern.ask
-import akka.persistence.{PersistentActor, RecoveryCompleted}
+import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
 import com.netflix.frigga.Names
 import com.netflix.spinnaker.tide.actor.TaskActorObject
@@ -185,6 +185,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case RecoveryCompleted =>
     case event =>
       updateState(event)

@@ -6,7 +6,7 @@ import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
 import akka.pattern.ask
-import akka.persistence.{PersistentActor, RecoveryCompleted}
+import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.TaskActorObject
 import com.netflix.spinnaker.tide.actor.task.TaskActor.{CancelTask, RestartTask, TaskCancel, Log, Mutation, GetTask, TaskStatus, ExecuteChildTasks, ExecuteTask, ContinueTask, TaskComplete, ChildTaskComplete, ChildTaskGroupComplete}
@@ -115,6 +115,7 @@ class TaskActor extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case RecoveryCompleted =>
     case event: TaskProtocol =>
       updateState(event)

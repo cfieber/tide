@@ -18,7 +18,7 @@ package com.netflix.spinnaker.tide.actor.copy
 
 import akka.actor.{ActorLogging, ActorRef, Props}
 import akka.contrib.pattern.ClusterSharding
-import akka.persistence.{PersistentActor, RecoveryCompleted}
+import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{PipelineDetails, GetPipeline}
 import com.netflix.spinnaker.tide.actor.service.Front50Actor.AddPipelines
@@ -164,6 +164,7 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case RecoveryCompleted =>
     case event =>
       updateState(event)

@@ -1,7 +1,7 @@
 package com.netflix.spinnaker.tide.actor.classiclink
 
 import akka.actor.{ActorLogging, Actor, Props}
-import akka.persistence.{RecoveryCompleted, PersistentActor}
+import akka.persistence.{RecoveryFailure, RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.{ClassicLinkSecurityGroupNames, InstancesNeedingClassicLinkAttached, GetInstancesNeedingClassicLinkAttached}
 import com.netflix.spinnaker.tide.actor.polling.ClassicLinkInstanceIdPollingActor.LatestClassicLinkInstanceIds
@@ -61,6 +61,7 @@ class ClassicLinkInstancesActor extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case event: RecoveryCompleted =>
     case event =>
       updateState(event)

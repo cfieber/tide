@@ -17,7 +17,7 @@
 package com.netflix.spinnaker.tide.actor.service
 
 import akka.actor.ActorLogging
-import akka.persistence.{RecoveryCompleted, PersistentActor}
+import akka.persistence.{RecoveryFailure, RecoveryCompleted, PersistentActor}
 import com.fasterxml.jackson.databind.DeserializationFeature._
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.databind.SerializationFeature._
@@ -53,6 +53,7 @@ trait RetrofitServiceActor[T] extends PersistentActor with ActorLogging {
   }
 
   override def receiveRecover: Receive = {
+    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
     case RecoveryCompleted =>
       init match {
         case Some(config) =>
