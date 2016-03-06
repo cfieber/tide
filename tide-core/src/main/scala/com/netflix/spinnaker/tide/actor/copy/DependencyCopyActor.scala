@@ -142,7 +142,11 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               self ! NonexistentTarget(resource)
             case Some(latestState) =>
               persist(TargetSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
-              self ! FoundTarget(resource)
+              if (latestState.state.ipPermissions.isEmpty) {
+                self ! NonexistentTarget(resource)
+              } else {
+                self ! FoundTarget(resource)
+              }
           }
           val sourceResource = resourceTracker.getSourceByTarget(resource)
           clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(sourceResource.ref, GetSecurityGroup())
