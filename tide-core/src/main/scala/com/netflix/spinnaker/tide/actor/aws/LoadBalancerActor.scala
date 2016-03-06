@@ -94,8 +94,13 @@ class LoadBalancerActor extends PersistentActor with ActorLogging {
     val cloudDriverActor = clusterSharding.shardRegion(CloudDriverActor.typeName)
     latestState match {
       case None =>
+        if (upsertLoadBalancer.state.securityGroups.nonEmpty) {
+          val stateWithoutSgs = upsertLoadBalancer.state.copy(securityGroups = Set())
+          val upsertWithoutSgs = upsertLoadBalancer.copy(state = stateWithoutSgs)
+          cloudDriverActor ! AwsResourceProtocol(awsReference, upsertWithoutSgs)
+        }
         cloudDriverActor ! AwsResourceProtocol(awsReference, upsertLoadBalancer)
-      case Some(latest) if upsertLoadBalancer.overwrite =>
+      case Some(latest) if upsertLoadBalancer.overwrite || latest.state.securityGroups.isEmpty =>
         val latestOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, latest.state)
         val upsertOp = ConstructCloudDriverOperations.constructUpsertLoadBalancerOperation(awsReference, upsertLoadBalancer.state)
         if (latestOp != upsertOp) {
