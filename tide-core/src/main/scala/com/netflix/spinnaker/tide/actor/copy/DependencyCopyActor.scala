@@ -295,11 +295,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         if (userIdGroupPair.userId != "amazon-elb") {
           if (userIdGroupPair.userId != securityGroupState.ownerId) {
             val msg = s"Cannot construct cross account security group ingress: (${securityGroupState.ownerId}.$groupName to ${userIdGroupPair.userId}.$ingressGroupName)"
-            if (task.dryRun) {
-              sendTaskEvent(Log(taskId, msg))
-            } else {
-              sendTaskEvent(TaskFailure(taskId, task, msg))
-            }
+            sendTaskEvent(TaskFailure(taskId, task, msg))
           } else {
             val referencedSourceSecurityGroup = resourceTracker.asSourceSecurityGroupReference(ingressGroupName)
             self ! RequiresSource(referencedSourceSecurityGroup, Option(referencedBy))
