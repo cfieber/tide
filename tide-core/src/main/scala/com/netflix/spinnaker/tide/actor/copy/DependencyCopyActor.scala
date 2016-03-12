@@ -176,7 +176,10 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
             if (task.dryRun) {
               self ! FoundTarget(targetResource)
             } else {
-              val desiredStateWithoutCrossAccountIngress = desiredState.copy(ipPermissions = sameAccountIpPermissions)
+              val desiredStateWithoutCrossAccountIngress = desiredState.copy(
+                ipPermissions = sameAccountIpPermissions,
+                description = desiredState.description.replaceAll("[^A-Za-z0-9. _-]", "")
+              )
               val securityGroupStateWithoutLegacySuffixes = desiredStateWithoutCrossAccountIngress.
                 removeLegacySuffixesFromSecurityGroupIngressRules()
               val vpcTransformation = new VpcTransformations().getVpcTransformation(task.source.vpcName, task.target.vpcName)
@@ -251,8 +254,10 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         val groupName = referencedBy.identity.groupName
         val ingressGroupName = userIdGroupPair.groupName.get
         if (userIdGroupPair.userId != securityGroupState.ownerId) {
-          val msg = s"Cannot construct cross account security group ingress: (${securityGroupState.ownerId}.$groupName to ${userIdGroupPair.userId}.$ingressGroupName)"
-          sendTaskEvent(Log(taskId, msg))
+          if (userIdGroupPair.userId != "amazon-elb") {
+            val msg = s"Cannot construct cross account security group ingress: (${securityGroupState.ownerId}.$groupName to ${userIdGroupPair.userId}.$ingressGroupName)"
+            sendTaskEvent(Log(taskId, msg))
+          }
           sameAccountIpPermissions -= ipPermission
         }
       }
