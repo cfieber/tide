@@ -368,7 +368,8 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       self ! TaskSuccess(taskId, task, DependencyCopyTaskResult(resourceTracker.securityGroupIdsSourceToTarget,
         resourceTracker.targetSecurityGroupNameToId))
     } else {
-      sendTaskEvent(Log(taskId, s"Waiting for dependencies: ${resourceTracker.dependenciesNotYetFound}"))
+      val notYetFound = resourceTracker.dependenciesNotYetFound.map(_.ref.identity.akkaIdentifier).mkString(", ")
+      sendTaskEvent(Log(taskId, s"Waiting for dependencies: $notYetFound"))
     }
   }
 
