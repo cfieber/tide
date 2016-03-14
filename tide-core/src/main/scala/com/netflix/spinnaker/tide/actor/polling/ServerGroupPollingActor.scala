@@ -98,7 +98,9 @@ class ServerGroupPollingActor() extends PollingActor {
                 clusterSharding.shardRegion(ServerGroupActor.typeName) ! AwsResourceProtocol(AwsReference(location,
                   autoScalingGroup.identity), latestState)
                 if (launchConfiguration.state.classicLinkVPCId.isEmpty && autoScalingGroup.state.VPCZoneIdentifier.isEmpty) {
-                  val inServiceInstanceIds = autoScalingGroup.instances.filter(_.lifecycleState == "InService").map(_.instanceId)
+                  val inServiceInstanceIds = autoScalingGroup.instances.filter { instance =>
+                    instance.lifecycleState == "InService" && instance.healthStatus == "Healthy"
+                  }.map(_.instanceId)
                   nonClassicLinkedLaunchConfigInstanceIds ++= inServiceInstanceIds
                 }
               }
