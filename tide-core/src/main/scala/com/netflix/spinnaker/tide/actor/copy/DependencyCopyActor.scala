@@ -367,6 +367,8 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     if (resourceTracker.hasResolvedEverythingRequired) {
       self ! TaskSuccess(taskId, task, DependencyCopyTaskResult(resourceTracker.securityGroupIdsSourceToTarget,
         resourceTracker.targetSecurityGroupNameToId))
+    } else {
+      sendTaskEvent(Log(taskId, s"Waiting for dependencies: ${resourceTracker.dependenciesNotYetFound}"))
     }
   }
 
