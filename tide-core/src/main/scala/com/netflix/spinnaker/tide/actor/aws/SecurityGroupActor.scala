@@ -91,10 +91,6 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
         desiredState.foreach(mutate)
       }
 
-    case event: CloudDriverResponse =>
-      if (event.taskDetail.status.failed) {
-        log.error(s"**! Failed to create security group. id: ${event.taskDetail.id}, error: ${event.taskDetail.status.status}")
-      }
   }
 
   private def mutate(upsertSecurityGroup: UpsertSecurityGroup) = {
