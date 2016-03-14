@@ -16,7 +16,7 @@
 
 package com.netflix.spinnaker.tide.actor.aws
 
-import akka.actor.{PoisonPill, ReceiveTimeout, ActorLogging, Props}
+import akka.actor._
 import akka.contrib.pattern.ShardRegion._
 import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
@@ -24,16 +24,15 @@ import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{PipelineDetails, GetP
 import com.netflix.spinnaker.tide.model.Front50Service.PipelineState
 import scala.concurrent.duration.DurationInt
 
-class PipelineActor extends PersistentActor with ActorLogging {
+class PipelineActor extends Actor with ActorLogging {
 
-  override def persistenceId: String = self.path.name
   context.setReceiveTimeout(5 minutes)
 
   private implicit val dispatcher = context.dispatcher
 
   var latestState: Option[PipelineState] = None
 
-  override def receiveCommand: Receive = {
+  override def receive: Receive = {
     case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
 
     case event: GetPipeline =>
@@ -41,23 +40,8 @@ class PipelineActor extends PersistentActor with ActorLogging {
 
     case event: PipelineDetails =>
       if (latestState != event.state) {
-        persist(event) { e => updateState(event) }
-      }
-  }
-
-  private def updateState(event: Any) = {
-    event match {
-      case event: PipelineDetails =>
         latestState = event.state
-      case _ => Nil
-    }
-  }
-
-  override def receiveRecover: Receive = {
-    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
-    case RecoveryCompleted => Nil
-    case event: Any =>
-      updateState(event)
+      }
   }
 
 }

@@ -16,7 +16,7 @@
 
 package com.netflix.spinnaker.tide.actor.service
 
-import akka.actor.Props
+import akka.actor.{ActorLogging, Props}
 import com.netflix.frigga.Names
 import com.netflix.spinnaker.tide.actor.SingletonActorObject
 import com.netflix.spinnaker.tide.model.AwsApi._
@@ -26,13 +26,14 @@ import com.netflix.spinnaker.tide.model.CloudDriverService._
 import com.netflix.spinnaker.tide.model.CloudDriverService.Listener
 import retrofit.RestAdapter.LogLevel
 
-class CloudDriverActor extends RetrofitServiceActor[CloudDriverService] {
+class CloudDriverActor extends RetrofitServiceActor[CloudDriverService] with ActorLogging {
 
   def operational: Receive = {
     case AwsResourceProtocol(awsReference, event: UpsertSecurityGroup) =>
       val ref = awsReference.asInstanceOf[AwsReference[SecurityGroupIdentity]]
       val op = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(ref, event.state)
       val taskResult = service.submitTask(op.content())
+      log.info(s"*** Upsert security group $ref. taskId: ${taskResult.id}")
       sender() ! CloudDriverResponse(service.getTaskDetail(taskResult.id))
 
     case AwsResourceProtocol(awsReference, event: UpsertLoadBalancer) =>
