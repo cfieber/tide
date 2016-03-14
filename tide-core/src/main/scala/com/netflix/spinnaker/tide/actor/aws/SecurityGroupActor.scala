@@ -24,6 +24,7 @@ import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor.{SecurityGroupComparableAttributes, DiffSecurityGroup}
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor.{GetDiff, DiffAttributes}
+import com.netflix.spinnaker.tide.actor.service.CloudDriverActor.CloudDriverResponse
 import com.netflix.spinnaker.tide.actor.service.{CloudDriverActor, ConstructCloudDriverOperations}
 import com.netflix.spinnaker.tide.model._
 import AwsApi._
@@ -88,6 +89,11 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
         }
       } else {
         desiredState.foreach(mutate)
+      }
+
+    case event: CloudDriverResponse =>
+      if (event.taskDetail.status.failed) {
+        log.error(s"**! Failed to create security group. id: ${event.taskDetail.id}, error: ${event.taskDetail.status.status}")
       }
   }
 
