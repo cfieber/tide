@@ -30,9 +30,7 @@ import AwsApi.{AwsReference, ServerGroupIdentity}
 import scala.beans.BeanProperty
 import scala.concurrent.duration.DurationInt
 
-class ServerGroupActor extends PersistentActor with ActorLogging {
-
-  override def persistenceId: String = self.path.name
+class ServerGroupActor extends Actor with ActorLogging {
 
   val clusterSharding = ClusterSharding.get(context.system)
 
@@ -42,7 +40,7 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
   var awsReference: AwsReference[ServerGroupIdentity] = _
   var latestState: Option[ServerGroupLatestState] = None
 
-  override def receiveCommand: Receive = {
+  override def receive: Receive = {
     case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
 
     case wrapper: AwsResourceProtocol[_] =>
@@ -60,39 +58,18 @@ class ServerGroupActor extends PersistentActor with ActorLogging {
     case event: ClearLatestState =>
       this.awsReference = newAwsReference
       if (latestState.isDefined) {
-        persist(event) { it =>
-          updateState(it)
-          val comparableEvent = DiffServerGroup(awsReference, None)
-          clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
-        }
+        latestState = None
+        val comparableEvent = DiffServerGroup(awsReference, None)
+        clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
       }
 
     case event: ServerGroupLatestState =>
       this.awsReference = newAwsReference
       if (latestState != Option(event)) {
-        persist(event) { e =>
-          updateState(event)
-          val comparableEvent = DiffServerGroup(awsReference,
-            Option(ServerGroupComparableAttributes.from(event)))
-          clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
-        }
-      }
-  }
-
-  private def updateState(event: ResourceEvent) = {
-    event match {
-      case event: ServerGroupLatestState =>
         latestState = Option(event)
-      case event: ClearLatestState =>
-        latestState = None
-      case _ => Nil
-    }
-  }
-
-  override def receiveRecover: Receive = {
-    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
-    case event: ServerGroupEvent =>
-      updateState(event)
+        val comparableEvent = DiffServerGroup(awsReference, Option(ServerGroupComparableAttributes.from(event)))
+        clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
+      }
   }
 
 }
