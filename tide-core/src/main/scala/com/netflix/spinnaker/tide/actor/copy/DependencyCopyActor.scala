@@ -148,6 +148,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               persist(TargetSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
               if (latestState.state.ipPermissions.isEmpty) {
                 self ! NonexistentTarget(resource)
+                self ! FoundTarget(resource)
               } else {
                 self ! FoundTarget(resource)
               }
@@ -229,20 +230,18 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
                 if (task.dryRun) {
                   self ! FoundTarget(targetResource)
                 } else {
-                  if (resourceTracker.isNonexistentTarget(targetResource)) {
-                    val loadBalancerStateForTargetVpc = latestState.state.forVpc(task.target.vpcName, vpcIds.target)
-                      .removeLegacySuffixesFromSecurityGroups()
-                    val newLoadBalancerState = (vpcIds.target, task.appName) match {
-                      case (Some(_), Some(appName)) =>
-                        val securityGroupsIncludingAppElbSecurityGroup = loadBalancerStateForTargetVpc.securityGroups +
-                          appSecurityGroupForElbName(appName)
-                        loadBalancerStateForTargetVpc.copy(securityGroups = securityGroupsIncludingAppElbSecurityGroup)
-                      case _ => loadBalancerStateForTargetVpc
-                    }
-                    val upsert = UpsertLoadBalancer(newLoadBalancerState, overwrite = false)
-                    logCreateEvent(targetResource, referencingSource)
-                    clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(targetResource.ref, upsert)
+                  val loadBalancerStateForTargetVpc = latestState.state.forVpc(task.target.vpcName, vpcIds.target)
+                    .removeLegacySuffixesFromSecurityGroups()
+                  val newLoadBalancerState = (vpcIds.target, task.appName) match {
+                    case (Some(_), Some(appName)) =>
+                      val securityGroupsIncludingAppElbSecurityGroup = loadBalancerStateForTargetVpc.securityGroups +
+                        appSecurityGroupForElbName(appName)
+                      loadBalancerStateForTargetVpc.copy(securityGroups = securityGroupsIncludingAppElbSecurityGroup)
+                    case _ => loadBalancerStateForTargetVpc
                   }
+                  val upsert = UpsertLoadBalancer(newLoadBalancerState, overwrite = false)
+                  logCreateEvent(targetResource, referencingSource)
+                  clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(targetResource.ref, upsert)
                 }
               }
             }
