@@ -35,6 +35,7 @@ class CloudDriverActor extends RetrofitServiceActor[CloudDriverService] with Act
       val taskResult = service.submitTask(op.content())
       log.info(s"*** Upsert security group $ref. taskId: ${taskResult.id}")
       sender() ! CloudDriverResponse(service.getTaskDetail(taskResult.id))
+      waitBetweenEventsToAvoidThrottling()
 
     case AwsResourceProtocol(awsReference, event: UpsertLoadBalancer) =>
       val ref = awsReference.asInstanceOf[AwsReference[LoadBalancerIdentity]]
@@ -53,9 +54,14 @@ class CloudDriverActor extends RetrofitServiceActor[CloudDriverService] with Act
       val op = ConstructCloudDriverOperations.constructAttachClassicLinkVpcOperation(ref, event)
       val taskResult = service.submitTask(op.content())
       sender() ! CloudDriverResponse(service.getTaskDetail(taskResult.id))
+      waitBetweenEventsToAvoidThrottling()
 
     case event: GetTaskDetail =>
       sender() ! CloudDriverResponse(service.getTaskDetail(event.id))
+  }
+
+  def waitBetweenEventsToAvoidThrottling() = {
+    Thread.sleep(200)
   }
 }
 
