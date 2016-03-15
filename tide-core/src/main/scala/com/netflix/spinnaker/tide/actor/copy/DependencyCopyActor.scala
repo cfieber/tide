@@ -105,6 +105,10 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       }
 
     case event: CheckCompletion =>
+      val notYetFound = resourceTracker.dependenciesNotYetFound.map(_.ref.identity.akkaIdentifier)
+      if (notYetFound.nonEmpty) {
+        sendTaskEvent(Log(taskId, s"Waiting for dependencies: ${notYetFound.mkString(", ")}"))
+      }
       checkCompletion()
       askForRelevantResources()
 
@@ -248,21 +252,24 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   }
 
   private def filterOutCrossAccountIngress(securityGroupState: SecurityGroupState, referencedBy: AwsReference[SecurityGroupIdentity]): Set[IpPermission] = {
-    var sameAccountIpPermissions: Set[IpPermission] = securityGroupState.ipPermissions
-    securityGroupState.ipPermissions.foreach { ipPermission =>
-      ipPermission.userIdGroupPairs.foreach { userIdGroupPair =>
-        val groupName = referencedBy.identity.groupName
-        val ingressGroupName = userIdGroupPair.groupName.get
-        if (userIdGroupPair.userId != securityGroupState.ownerId) {
+    val sameAccountIpPermissions = securityGroupState.ipPermissions.map { ipPermission =>
+      val sameAccountUserIdGroupPairs = ipPermission.userIdGroupPairs.filter { userIdGroupPair =>
+        val isSameAccount = userIdGroupPair.userId == securityGroupState.ownerId
+        if (!isSameAccount) {
           if (userIdGroupPair.userId != "amazon-elb") {
+            val groupName = referencedBy.identity.groupName
+            val ingressGroupName = userIdGroupPair.groupName.get
             val msg = s"Cannot construct cross account security group ingress: (${securityGroupState.ownerId}.$groupName to ${userIdGroupPair.userId}.$ingressGroupName)"
             sendTaskEvent(Log(taskId, msg))
           }
-          sameAccountIpPermissions -= ipPermission
         }
+        isSameAccount
       }
+      ipPermission.copy(userIdGroupPairs = sameAccountUserIdGroupPairs)
     }
-    sameAccountIpPermissions
+    sameAccountIpPermissions.filter { ipPermission =>
+      ipPermission.userIdGroupPairs.nonEmpty || ipPermission.ipRanges.nonEmpty
+    }
   }
 
   private def requireIngressSecurityGroups(ipPermissions: Set[IpPermission], referencedBy: AwsReference[SecurityGroupIdentity]): Unit = {
@@ -367,9 +374,6 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     if (resourceTracker.hasResolvedEverythingRequired) {
       self ! TaskSuccess(taskId, task, DependencyCopyTaskResult(resourceTracker.securityGroupIdsSourceToTarget,
         resourceTracker.targetSecurityGroupNameToId))
-    } else {
-      val notYetFound = resourceTracker.dependenciesNotYetFound.map(_.ref.identity.akkaIdentifier).mkString(", ")
-      sendTaskEvent(Log(taskId, s"Waiting for dependencies: $notYetFound"))
     }
   }
 
