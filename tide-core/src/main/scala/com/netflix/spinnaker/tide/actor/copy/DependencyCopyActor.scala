@@ -292,7 +292,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         ipRanges = Set(),
         userIdGroupPairs = Set(UserIdGroupPairs(
           groupId = None,
-          groupName = Some("nf-classicLink"),
+          groupName = Some("nf-classiclink"),
           userId = ""
         ))
       )
