@@ -131,7 +131,8 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
             val securityGroupIdToName = getSecurityGroupInToNameMapping(dependencies.account, dependencies.region)
             val securityGroupNames = dependencies.securityGroupIds.map(securityGroupIdToName(_).groupName)
             DependencyCopyTask(sourceVpcLocation, targetVpcLocation, securityGroupNames,
-              dependencies.loadBalancersNames, dryRun = task.dryRun)
+              dependencies.loadBalancersNames, Option(dependencies.appName),
+              allowIngressFromClassic = task.allowIngressFromClassic, dryRun = task.dryRun)
           }
           startChildTasks(ChildTaskDescriptions(taskId, dependencyCopyTasks))
       }
@@ -181,6 +182,7 @@ object PipelineDeepCopyActor extends ClusteredActorObject with TaskActorObject {
   case class PipelineDeepCopyTask(sourceId: String,
                                   sourceVpcName: Option[String],
                                   targetVpcName: String,
+                                  allowIngressFromClassic: Boolean = true,
                                   dryRun: Boolean = false)
     extends TaskDescription with PipelineDeepCopyProtocol {
     val taskType: String = "PipelineDeepCopyTask"
