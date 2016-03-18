@@ -1,10 +1,8 @@
 package com.netflix.spinnaker.tide.actor.polling
 
-import java.util.Date
 
-import akka.actor.{ActorRef, Props, ActorLogging}
+import akka.actor.{Actor, ActorRef, Props}
 import akka.contrib.pattern.ClusterSharding
-import akka.persistence.{RecoveryFailure, RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.clouddriver.aws.security.config.CredentialsConfig
 import com.netflix.spinnaker.clouddriver.aws.security.config.CredentialsConfig.Account
 import com.netflix.spinnaker.tide.actor.SingletonActorObject
@@ -17,9 +15,7 @@ import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
 import scala.concurrent.duration.DurationInt
 import scala.collection.JavaConverters._
 
-class PollingDirector extends PersistentActor with ActorLogging {
-
-  override def persistenceId: String = self.path.name
+class PollingDirector extends Actor {
 
   var pollInit: Option[PollInit] = None
 
@@ -39,12 +35,10 @@ class PollingDirector extends PersistentActor with ActorLogging {
     ClusterSharding.get(context.system).shardRegion(name)
   }
 
-  override def receiveCommand: Receive = {
-    case pollInit: PollInit =>
-      persist(pollInit) { init =>
-        updateState(init)
-        context.become(polling(init))
-      }
+  override def receive: Receive = {
+    case event: PollInit =>
+        pollInit = Option(event)
+        context.become(polling(event))
     case _ =>
   }
 
@@ -69,23 +63,6 @@ class PollingDirector extends PersistentActor with ActorLogging {
     case _ =>
   }
 
-  override def receiveRecover: Receive = {
-    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
-    case event: RecoveryCompleted =>
-      pollInit.foreach { init =>
-        context.become(polling(init))
-      }
-    case event =>
-      updateState(event)
-  }
-
-  def updateState(event: Any) = {
-    event match {
-      case init: PollInit =>
-        pollInit = Option(init)
-      case _ =>
-    }
-  }
 }
 
 sealed trait PollingDirectorProtocol extends Serializable
