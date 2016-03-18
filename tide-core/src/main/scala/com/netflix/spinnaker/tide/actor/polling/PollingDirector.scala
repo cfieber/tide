@@ -3,8 +3,7 @@ package com.netflix.spinnaker.tide.actor.polling
 
 import akka.actor.{Actor, ActorRef, Props}
 import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.clouddriver.aws.security.config.CredentialsConfig
-import com.netflix.spinnaker.clouddriver.aws.security.config.CredentialsConfig.Account
+import com.netflix.spinnaker.clouddriver.aws.security.NetflixAmazonCredentials
 import com.netflix.spinnaker.tide.actor.SingletonActorObject
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.ClassicLinkSecurityGroupNames
@@ -47,8 +46,7 @@ class PollingDirector extends Actor {
       getShardCluster(PipelinePollingActor.typeName) ! PipelinePoll()
       val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, ClassicLinkInstanceIdPollingActor,
         SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
-      val accounts: Set[Account] = pollInit.credentialsConfig.getAccounts.asScala.toSet
-      for (account <- accounts) {
+      for (account <- pollInit.accounts) {
         val regions = account.getRegions.asScala
         for (region <- regions) {
           val location = AwsLocation(account.getName, region.getName)
@@ -70,7 +68,7 @@ sealed trait PollingDirectorProtocol extends Serializable
 object PollingDirector extends SingletonActorObject {
   val props = Props[PollingDirector]
 
-  case class PollInit(credentialsConfig: CredentialsConfig, classicLinkSecurityGroupNames: Seq[String]) extends PollingDirectorProtocol
+  case class PollInit(accounts: Set[NetflixAmazonCredentials], classicLinkSecurityGroupNames: Seq[String]) extends PollingDirectorProtocol
   case class Poll() extends PollingDirectorProtocol
 
 }
