@@ -113,7 +113,8 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
           } else {
             val sourceVpcLocation = VpcLocation(task.source.location, latestState.autoScalingGroup.vpcName)
             val dependencyCopyTask = DependencyCopyTask(sourceVpcLocation, task.target,
-              requiredSecurityGroups, sourceLoadBalancerNames, Option(appName), dryRun = task.dryRun)
+              requiredSecurityGroups, sourceLoadBalancerNames, Option(appName),
+              allowIngressFromClassic = task.allowIngressFromClassic, dryRun = task.dryRun)
             startChildTasks(ChildTaskDescriptions(taskId, List(dependencyCopyTask)))
           }
       }
@@ -200,6 +201,7 @@ object ServerGroupDeepCopyActor extends TaskActorObject {
   case class ServerGroupDeepCopyTaskResult(newServerGroupNames: Seq[String]) extends TaskResult with ServerGroupDeepCopyProtocol
   case class ServerGroupDeepCopyTask(source: AwsReference[AutoScalingGroupIdentity],
                                      target: VpcLocation,
+                                     allowIngressFromClassic: Boolean = true,
                                      dryRun: Boolean = false)
     extends TaskDescription with ServerGroupDeepCopyProtocol {
     val taskType: String = "ServerGroupDeepCopyTask"

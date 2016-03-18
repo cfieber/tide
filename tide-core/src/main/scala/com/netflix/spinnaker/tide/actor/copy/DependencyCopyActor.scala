@@ -284,6 +284,20 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
 
   private def appSecurityGroupForElbName(appName: String) = s"$appName-elb"
 
+  private def constructClassicLinkIpPermission(): IpPermission = {
+    IpPermission (
+        fromPort = Some(80),
+        toPort = Some(65535),
+        ipProtocol = "tcp",
+        ipRanges = Set(),
+        userIdGroupPairs = Set(UserIdGroupPairs(
+          groupId = None,
+          groupName = Some("nf-classicLink"),
+          userId = ""
+        ))
+      )
+  }
+
   private def constructAppSecurityGroup(appName: String): SecurityGroupState = {
     val userIdGroupPairs = Set (
       UserIdGroupPairs (
@@ -292,26 +306,30 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         userId = ""
       )
     )
-    SecurityGroupState (appName, Set (
+    var ipPermissions = Set (
       IpPermission (
-        fromPort = Some (7001),
-        toPort = Some (7001),
+        fromPort = Some(7001),
+        toPort = Some(7001),
         ipProtocol = "tcp",
         ipRanges = Set(),
         userIdGroupPairs = userIdGroupPairs
       ),
       IpPermission (
-        fromPort = Some (7002),
-        toPort = Some (7002),
+        fromPort = Some(7002),
+        toPort = Some(7002),
         ipProtocol = "tcp",
         ipRanges = Set(),
         userIdGroupPairs = userIdGroupPairs
       )
-    ), "")
+    )
+    if (task.allowIngressFromClassic) {
+      ipPermissions += constructClassicLinkIpPermission()
+    }
+    SecurityGroupState (appName, ipPermissions, "")
   }
 
   private def constructAppSecurityGroupForElb(appName: String): SecurityGroupState = {
-    SecurityGroupState(appSecurityGroupForElbName(appName), Set(
+    var ipPermissions = Set(
       IpPermission(
         fromPort = Some(80),
         toPort = Some(80),
@@ -326,7 +344,11 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         ipRanges = Set("0.0.0.0/0"),
         userIdGroupPairs = Set()
       )
-    ), "")
+    )
+    if (task.allowIngressFromClassic) {
+      ipPermissions += constructClassicLinkIpPermission()
+    }
+    SecurityGroupState(appSecurityGroupForElbName(appName), ipPermissions, "")
   }
 
   def logCreateEvent(targetResource: TargetResource[_ <: AwsIdentity], referencingSource: Option[AwsReference[_]]): Unit = {
@@ -406,6 +428,7 @@ object DependencyCopyActor extends TaskActorObject {
                                 requiredSecurityGroupNames: Set[String],
                                 sourceLoadBalancerNames: Set[String],
                                 appName: Option[String] = None,
+                                allowIngressFromClassic: Boolean = true,
                                 dryRun: Boolean = false) extends TaskDescription with DependencyCopyProtocol {
     val taskType: String = "DependencyCopyTask"
     val executionActorTypeName: String = typeName
