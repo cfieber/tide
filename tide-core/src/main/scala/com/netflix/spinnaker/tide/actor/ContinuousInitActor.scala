@@ -1,7 +1,5 @@
 package com.netflix.spinnaker.tide.actor
 
-import java.util.Date
-
 import akka.actor.{Actor, ActorLogging}
 import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.clouddriver.aws.security.NetflixAmazonCredentials
@@ -32,8 +30,13 @@ class ContinuousInitActor(clusterSharding: ClusterSharding,
 
   override def receive = {
     case t: Tick =>
-      val accounts: Set[NetflixAmazonCredentials] = accountCredentialsRepository.getAll.asScala.filter(p => p.isInstanceOf[NetflixAmazonCredentials]).map(p => p.asInstanceOf[NetflixAmazonCredentials]).toSet
-      clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(accounts, classicLinkSecurityGroupNames)
+      val credentials: Set[NetflixAmazonCredentials] = accountCredentialsRepository.getAll.asScala.
+        filter(p => p.isInstanceOf[NetflixAmazonCredentials]).map(p => p.asInstanceOf[NetflixAmazonCredentials]).toSet
+      val accountNamesToRegionNames: Map[String, Set[String]] = credentials.map{ credential =>
+        val regionNames: Set[String] = credential.getRegions.asScala.map(_.getName).toSet
+        credential.getName -> regionNames
+      }.toMap
+      clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(accountNamesToRegionNames, classicLinkSecurityGroupNames)
       clusterSharding.shardRegion(TaskDirector.typeName) ! GetRunningTasks()
     case _ =>
   }
