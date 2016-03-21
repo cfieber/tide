@@ -56,7 +56,7 @@ class ActorSystemConfiguration {
     netflixCluster.foreach { currentCluster =>
         currentIp = sys.env("EC2_LOCAL_IPV4")
         val currentApp = sys.env("NETFLIX_APP")
-        val currentAccount = sys.env("NETFLIX_ENVIRONMENT")
+        val currentAccount = sys.env("NETFLIX_ACCOUNT")
         val okClient = new OkClient(okHttpClientConfiguration.create())
         val cloudDriverService = CloudDriverInit(cloudDriverApiUrl).constructService(okClient)
         try {
