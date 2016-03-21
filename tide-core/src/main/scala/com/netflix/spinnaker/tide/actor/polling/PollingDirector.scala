@@ -3,7 +3,6 @@ package com.netflix.spinnaker.tide.actor.polling
 
 import akka.actor.{Actor, ActorRef, Props}
 import akka.contrib.pattern.ClusterSharding
-import com.netflix.spinnaker.clouddriver.aws.security.NetflixAmazonCredentials
 import com.netflix.spinnaker.tide.actor.SingletonActorObject
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.ClassicLinkSecurityGroupNames
@@ -12,7 +11,6 @@ import com.netflix.spinnaker.tide.actor.polling.PipelinePollingActor.PipelinePol
 import com.netflix.spinnaker.tide.actor.polling.PollingDirector.{Poll, PollInit}
 import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
 import scala.concurrent.duration.DurationInt
-import scala.collection.JavaConverters._
 
 class PollingDirector extends Actor {
 
@@ -46,10 +44,11 @@ class PollingDirector extends Actor {
       getShardCluster(PipelinePollingActor.typeName) ! PipelinePoll()
       val pollers: Seq[PollingActorObject] =Seq(VpcPollingActor, ClassicLinkInstanceIdPollingActor,
         SecurityGroupPollingActor, LoadBalancerPollingActor, ServerGroupPollingActor)
-      for (account <- pollInit.accounts) {
-        val regions = account.getRegions.asScala
-        for (region <- regions) {
-          val location = AwsLocation(account.getName, region.getName)
+      val accountNames: Set[String] = pollInit.accountNamesToRegionNames.keySet
+      for (accountName <- accountNames) {
+        val regionNames = pollInit.accountNamesToRegionNames(accountName)
+        for (regionName <- regionNames) {
+          val location = AwsLocation(accountName, regionName)
           for (poller <- pollers) {
             getShardCluster(poller.typeName) ! AwsPoll(location)
           }
@@ -68,7 +67,7 @@ sealed trait PollingDirectorProtocol extends Serializable
 object PollingDirector extends SingletonActorObject {
   val props = Props[PollingDirector]
 
-  case class PollInit(accounts: Set[NetflixAmazonCredentials], classicLinkSecurityGroupNames: Seq[String]) extends PollingDirectorProtocol
+  case class PollInit(accountNamesToRegionNames: Map[String, Set[String]], classicLinkSecurityGroupNames: Seq[String]) extends PollingDirectorProtocol
   case class Poll() extends PollingDirectorProtocol
 
 }
