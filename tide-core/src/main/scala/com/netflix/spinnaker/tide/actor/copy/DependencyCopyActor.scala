@@ -170,29 +170,29 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               }
             case Some(latestState) =>
               persist(SourceSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
-              task.appName match {
-                case Some(appName) if groupName == appName || groupName == appSecurityGroupForElbName(appName) =>
-                  val newIpPermissions: Set[IpPermission] = if (task.allowIngressFromClassic) {
-                    latestState.state.ipPermissions + constructClassicLinkIpPermission()
-                  } else {
-                    latestState.state.ipPermissions
-                  }
-                  latestState.state.copy(ipPermissions = newIpPermissions)
-                case _ =>
-                  latestState.state
-              }
+              latestState.state
           }
           val targetResource = resourceTracker.transformToTarget(resource)
           val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
           if (resourceTracker.isNonexistentTarget(targetResource)) {
             val sameAccountIpPermissions = filterOutCrossAccountIngress(desiredState, targetResource.ref)
-            requireIngressSecurityGroups(sameAccountIpPermissions, targetResource.ref)
+            val newIpPermissions: Set[IpPermission] = task.appName match {
+              case Some(appName) if groupName == appName || groupName == appSecurityGroupForElbName(appName) =>
+                if (task.allowIngressFromClassic) {
+                  sameAccountIpPermissions + constructClassicLinkIpPermission()
+                } else {
+                  sameAccountIpPermissions
+                }
+              case _ =>
+                sameAccountIpPermissions
+            }
+            requireIngressSecurityGroups(newIpPermissions, targetResource.ref)
             sendTaskEvent(Mutation(taskId, Create(), CreateAwsResource(targetResource.ref, referencingSource)))
             if (task.dryRun) {
               self ! FoundTarget(targetResource)
             } else {
               val desiredStateWithoutCrossAccountIngress = desiredState.copy(
-                ipPermissions = sameAccountIpPermissions,
+                ipPermissions = newIpPermissions,
                 description = desiredState.description.replaceAll("[^A-Za-z0-9. _-]", "")
               )
               val securityGroupStateWithoutLegacySuffixes = desiredStateWithoutCrossAccountIngress.
@@ -332,9 +332,6 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         userIdGroupPairs = userIdGroupPairs
       )
     )
-    if (task.allowIngressFromClassic) {
-      ipPermissions += constructClassicLinkIpPermission()
-    }
     SecurityGroupState (appName, ipPermissions, "")
   }
 
@@ -355,9 +352,6 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         userIdGroupPairs = Set()
       )
     )
-    if (task.allowIngressFromClassic) {
-      ipPermissions += constructClassicLinkIpPermission()
-    }
     SecurityGroupState(appSecurityGroupForElbName(appName), ipPermissions, "")
   }
 
