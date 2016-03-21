@@ -156,10 +156,10 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
           val sourceResource = resourceTracker.getSourceByTarget(resource)
           clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(sourceResource.ref, GetSecurityGroup())
         case resource: SourceResource[SecurityGroupIdentity] =>
+          val groupName = resource.ref.identity.groupName
           val desiredState: SecurityGroupState = event.latestState match {
             case None =>
               persist(SourceSecurityGroup(resource, "nonexistant"))(it => updateState(it))
-              val groupName = resource.ref.identity.groupName
               task.appName match {
                 case Some(appName) if groupName == appName =>
                   constructAppSecurityGroup(appName)
@@ -170,7 +170,17 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               }
             case Some(latestState) =>
               persist(SourceSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
-              latestState.state
+              task.appName match {
+                case Some(appName) if groupName == appName || groupName == appSecurityGroupForElbName(appName) =>
+                  val newIpPermissions: Set[IpPermission] = if (task.allowIngressFromClassic) {
+                    latestState.state.ipPermissions + constructClassicLinkIpPermission()
+                  } else {
+                    latestState.state.ipPermissions
+                  }
+                  latestState.state.copy(ipPermissions = newIpPermissions)
+                case _ =>
+                  latestState.state
+              }
           }
           val targetResource = resourceTracker.transformToTarget(resource)
           val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
