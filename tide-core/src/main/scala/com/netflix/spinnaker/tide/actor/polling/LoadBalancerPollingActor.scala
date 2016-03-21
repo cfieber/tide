@@ -48,25 +48,33 @@ class LoadBalancerPollingActor() extends PollingActor {
       (latestSecurityGroups, latestVpcs) match {
         case (Some(LatestSecurityGroupIdToNameMappings(_, securityGroupIdToName)), Some(LatestVpcs(_, vpcs, subnets))) =>
           val loadBalancing = getAwsServiceProvider(location).getAmazonElasticLoadBalancing
-          val loadBalancers = retrieveAll{ nextToken =>
-            val result = loadBalancing.describeLoadBalancers(new DescribeLoadBalancersRequest().withMarker(nextToken))
-            (result.getLoadBalancerDescriptions.map(AwsConversion.loadBalancerFrom), Option(result.getNextMarker))
+          val loadBalancersOption: Option[Seq[LoadBalancer]] = try {
+            val loadBalancers = retrieveAll{ nextToken =>
+              val result = loadBalancing.describeLoadBalancers(new DescribeLoadBalancersRequest().withMarker(nextToken))
+              (result.getLoadBalancerDescriptions.map(AwsConversion.loadBalancerFrom), Option(result.getNextMarker))
+            }
+            Option(loadBalancers)
+          } catch {
+            case e: Exception =>
+              log.error(e, "failed call to retrieve AWS resources")
+              None
           }
+          loadBalancersOption.foreach { loadBalancers =>
+            val oldIds = currentIds
+            currentIds = loadBalancers.map(_.identity)
+            val removedIds = oldIds.toSet -- currentIds.toSet
+            removedIds.foreach { identity =>
+              val reference = AwsReference(location, identity)
+              clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, ClearLatestState())
+            }
 
-          val oldIds = currentIds
-          currentIds = loadBalancers.map(_.identity)
-          val removedIds = oldIds.toSet -- currentIds.toSet
-          removedIds.foreach { identity =>
-            val reference = AwsReference(location, identity)
-            clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, ClearLatestState())
-          }
-
-          loadBalancers.foreach { loadBalancer =>
-            var normalizedState = loadBalancer.state.convertToSecurityGroupNames(securityGroupIdToName).
-              populateVpcAttributes(vpcs, subnets)
-            val reference = AwsReference(location, loadBalancer.identity)
-            val latestState = LoadBalancerLatestState(normalizedState)
-            clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, latestState)
+            loadBalancers.foreach { loadBalancer =>
+              val normalizedState = loadBalancer.state.convertToSecurityGroupNames(securityGroupIdToName).
+                populateVpcAttributes(vpcs, subnets)
+              val reference = AwsReference(location, loadBalancer.identity)
+              val latestState = LoadBalancerLatestState(normalizedState)
+              clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(reference, latestState)
+            }
           }
         case _ =>
       }
