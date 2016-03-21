@@ -44,30 +44,37 @@ class SecurityGroupPollingActor extends PollingActor {
     case msg: AwsPoll =>
       val location = msg.location
       val amazonEc2 = getAwsServiceProvider(location).getAmazonEC2
-      val securityGroups = amazonEc2.describeSecurityGroups.getSecurityGroups.map(AwsConversion.securityGroupFrom)
-
-      val oldIds = currentIds
-      currentIds = securityGroups.map(_.identity)
-      val removedIds = oldIds.toSet -- currentIds.toSet
-      removedIds.foreach { identity =>
-        val reference = AwsReference(location, identity)
-        clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(reference, ClearLatestState())
+      val securityGroupsOption: Option[Seq[SecurityGroup]] = try {
+        Option(amazonEc2.describeSecurityGroups.getSecurityGroups.map(AwsConversion.securityGroupFrom))
+      } catch {
+        case e: Exception =>
+          log.error(e, "failed call to retrieve AWS resources")
+          None
       }
 
-      securityGroupIdToName = securityGroups.map { securityGroup =>
-        securityGroup.groupId -> securityGroup.identity
-      }.toMap
-      val securityGroupIdToNameMsg = LatestSecurityGroupIdToNameMappings(location, securityGroupIdToName)
-      clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! securityGroupIdToNameMsg
-      clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! securityGroupIdToNameMsg
-      clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! securityGroupIdToNameMsg
+      securityGroupsOption.foreach { securityGroups =>
+        val oldIds = currentIds
+        currentIds = securityGroups.map(_.identity)
+        val removedIds = oldIds.toSet -- currentIds.toSet
+        removedIds.foreach { identity =>
+          val reference = AwsReference(location, identity)
+          clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(reference, ClearLatestState())
+        }
+
+        securityGroupIdToName = securityGroups.map { securityGroup =>
+          securityGroup.groupId -> securityGroup.identity
+        }.toMap
+        val securityGroupIdToNameMsg = LatestSecurityGroupIdToNameMappings(location, securityGroupIdToName)
+        clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! securityGroupIdToNameMsg
+        clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! securityGroupIdToNameMsg
+        clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! securityGroupIdToNameMsg
         securityGroups.foreach { securityGroup =>
-        val normalizedState = securityGroup.state.ensureSecurityGroupNameOnIngressRules(securityGroupIdToName)
-        val latestState = SecurityGroupLatestState(securityGroup.groupId, normalizedState)
-        val reference = AwsReference(location, securityGroup.identity)
-        clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(reference, latestState)
+          val normalizedState = securityGroup.state.ensureSecurityGroupNameOnIngressRules(securityGroupIdToName)
+          val latestState = SecurityGroupLatestState(securityGroup.groupId, normalizedState)
+          val reference = AwsReference(location, securityGroup.identity)
+          clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(reference, latestState)
+        }
       }
-
   }
 
 }

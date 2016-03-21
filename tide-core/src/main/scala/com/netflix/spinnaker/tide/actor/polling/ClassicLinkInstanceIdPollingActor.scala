@@ -18,11 +18,20 @@ class ClassicLinkInstanceIdPollingActor extends PollingActor {
     case msg: AwsPoll =>
       val location = msg.location
       val amazonEc2 = getAwsServiceProvider(location).getAmazonEC2
-      val instanceIds = retrieveAll{ nextToken =>
-        val result = amazonEc2.describeClassicLinkInstances(new DescribeClassicLinkInstancesRequest().withNextToken(nextToken))
-        (result.getInstances.map(_.getInstanceId), Option(result.getNextToken))
+      val instanceIdsOption: Option[Seq[String]] = try {
+        val instanceIds = retrieveAll { nextToken =>
+          val result = amazonEc2.describeClassicLinkInstances(new DescribeClassicLinkInstancesRequest().withNextToken(nextToken))
+          (result.getInstances.map(_.getInstanceId), Option(result.getNextToken))
+        }
+        Option(instanceIds)
+      } catch {
+        case e: Exception =>
+          log.error(e, "failed call to retrieve AWS resources")
+          None
       }
-      clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! LatestClassicLinkInstanceIds(location, instanceIds)
+      instanceIdsOption.foreach { instanceIds =>
+        clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! LatestClassicLinkInstanceIds(location, instanceIds)
+      }
   }
 
 }
