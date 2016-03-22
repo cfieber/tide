@@ -103,14 +103,17 @@ object AwsConversion {
 
   def loadBalancerFrom(awsloadBalancer: awsLoadbalancing.LoadBalancerDescription): LoadBalancer = {
     val awsHealthCheck = awsloadBalancer.getHealthCheck
-    val nullSafeHealthyThreshold: Int = if (Option(awsHealthCheck).nonEmpty) awsHealthCheck.getHealthyThreshold else 10
-    val healthCheck = HealthCheck(
-      healthyThreshold = nullSafeHealthyThreshold,
-      interval = awsHealthCheck.getInterval,
-      target = awsHealthCheck.getTarget,
-      timeout = awsHealthCheck.getTimeout,
-      unhealthyThreshold = awsHealthCheck.getUnhealthyThreshold
-    )
+    val healthCheck = if (Option(awsHealthCheck).nonEmpty) {
+      HealthCheck(
+        healthyThreshold = awsHealthCheck.getHealthyThreshold,
+        interval = awsHealthCheck.getInterval,
+        target = awsHealthCheck.getTarget,
+        timeout = awsHealthCheck.getTimeout,
+        unhealthyThreshold = awsHealthCheck.getUnhealthyThreshold
+      )
+    } else {
+      null
+    }
     val awsSourceSecurityGroup = awsloadBalancer.getSourceSecurityGroup
     val sourceSecurityGroup = ElbSourceSecurityGroup(
       groupName = awsSourceSecurityGroup.getGroupName,
