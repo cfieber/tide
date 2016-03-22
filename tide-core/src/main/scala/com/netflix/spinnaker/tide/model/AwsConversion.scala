@@ -103,7 +103,7 @@ object AwsConversion {
 
   def loadBalancerFrom(awsloadBalancer: awsLoadbalancing.LoadBalancerDescription): LoadBalancer = {
     val awsHealthCheck = awsloadBalancer.getHealthCheck
-    val nullSafeHealthyThreshold: Int = if (Option(awsHealthCheck.getHealthyThreshold).nonEmpty) awsHealthCheck.getHealthyThreshold else 10
+    val nullSafeHealthyThreshold: Int = if (Option(awsHealthCheck).nonEmpty) awsHealthCheck.getHealthyThreshold else 10
     val healthCheck = HealthCheck(
       healthyThreshold = nullSafeHealthyThreshold,
       interval = awsHealthCheck.getInterval,
