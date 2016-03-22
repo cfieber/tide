@@ -33,7 +33,6 @@ class CloudDriverActor extends RetrofitServiceActor[CloudDriverService] with Act
       val ref = awsReference.asInstanceOf[AwsReference[SecurityGroupIdentity]]
       val op = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(ref, event.state)
       val taskResult = service.submitTask(op.content())
-      log.info(s"*** Upsert security group $ref. taskId: ${taskResult.id}")
       sender() ! CloudDriverResponse(service.getTaskDetail(taskResult.id))
       waitBetweenEventsToAvoidThrottling()
 
