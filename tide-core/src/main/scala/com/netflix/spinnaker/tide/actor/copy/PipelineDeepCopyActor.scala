@@ -21,12 +21,12 @@ import akka.contrib.pattern.ClusterSharding
 import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{PipelineDetails, GetPipeline}
-import com.netflix.spinnaker.tide.actor.service.Front50Actor.AddPipelines
+import com.netflix.spinnaker.tide.actor.service.Front50Actor.SavePipeline
 import com.netflix.spinnaker.tide.actor.{ClusteredActorObject, TaskActorObject}
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor
 import com.netflix.spinnaker.tide.actor.copy.DependencyCopyActor.{DependencyCopyTaskResult, DependencyCopyTask}
 import com.netflix.spinnaker.tide.actor.copy.PipelineDeepCopyActor.{CreatePipeline, StartPipelineCloning, PipelineDeepCopyTaskResult, PipelineDeepCopyTask}
-import com.netflix.spinnaker.tide.actor.polling.{SecurityGroupPollingContract, SecurityGroupPollingContractActor, SecurityGroupPollingActor}
+import com.netflix.spinnaker.tide.actor.polling.{SecurityGroupPollingContract, SecurityGroupPollingContractActor}
 import com.netflix.spinnaker.tide.actor.polling.SecurityGroupPollingActor.GetSecurityGroupIdToNameMappings
 import com.netflix.spinnaker.tide.actor.service.Front50Actor
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
@@ -145,7 +145,7 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
       sendTaskEvent(Mutation(taskId, Create(), CreatePipeline(newPipeline)))
       if (!task.dryRun) {
         sendTaskEvent(Log(taskId, s"Cloning pipeline '${pipelineState.name}'"))
-        clusterSharding.shardRegion(Front50Actor.typeName) ! AddPipelines(List(newPipeline))
+        clusterSharding.shardRegion(Front50Actor.typeName) ! SavePipeline(newPipeline)
       }
       self ! TaskSuccess(taskId, task, PipelineDeepCopyTaskResult("")) // TODO: get new pipeline ID
 
