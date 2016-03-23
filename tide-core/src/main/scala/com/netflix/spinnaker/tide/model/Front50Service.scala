@@ -26,7 +26,7 @@ trait Front50Service {
   def getAllPipelines: Seq[Pipeline]
 
   @Headers (Array ("Accept: application/json") )
-  @POST ("/pipelines/batchUpdate") def addPipelines (@Body pipelines: Seq[PipelineState]): String
+  @POST ("/pipelines") def savePipeline(@Body pipeline: PipelineState): String
 }
 
 object Front50Service {
