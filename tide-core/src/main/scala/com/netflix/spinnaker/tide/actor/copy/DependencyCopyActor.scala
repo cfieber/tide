@@ -161,12 +161,10 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
             case None =>
               persist(SourceSecurityGroup(resource, "nonexistant"))(it => updateState(it))
               task.appName match {
-                case Some(appName) if groupName == appName =>
-                  constructAppSecurityGroup(appName)
                 case Some(appName) if groupName == appSecurityGroupForElbName(appName) =>
                   constructAppSecurityGroupForElb(appName)
                 case _ =>
-                  SecurityGroupState(resource.ref.identity.groupName, Set(), "")
+                  SecurityGroupState(groupName, Set(), "")
               }
             case Some(latestState) =>
               persist(SourceSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
@@ -178,10 +176,15 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
             val sameAccountIpPermissions = filterOutCrossAccountIngress(desiredState, targetResource.ref)
             val newIpPermissions: Set[IpPermission] = task.appName match {
               case Some(appName) if groupName == appName || groupName == appSecurityGroupForElbName(appName) =>
-                if (task.allowIngressFromClassic) {
+                val ipPermissionsWithClassicLink = if (task.allowIngressFromClassic) {
                   sameAccountIpPermissions + constructClassicLinkIpPermission()
                 } else {
                   sameAccountIpPermissions
+                }
+                if (groupName == appName) {
+                  ipPermissionsWithClassicLink + constructAppElbIpPermission(appName)
+                } else {
+                  ipPermissionsWithClassicLink
                 }
               case _ =>
                 sameAccountIpPermissions
@@ -308,31 +311,20 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       )
   }
 
-  private def constructAppSecurityGroup(appName: String): SecurityGroupState = {
-    val userIdGroupPairs = Set (
-      UserIdGroupPairs (
-        groupId = None,
-        groupName = Some (appSecurityGroupForElbName(appName)),
-        userId = ""
+  private def constructAppElbIpPermission(appName: String): IpPermission = {
+    IpPermission (
+      fromPort = Some(7001),
+      toPort = Some(7002),
+      ipProtocol = "tcp",
+      ipRanges = Set(),
+      userIdGroupPairs = Set (
+        UserIdGroupPairs (
+          groupId = None,
+          groupName = Some (appSecurityGroupForElbName(appName)),
+          userId = ""
+        )
       )
     )
-    var ipPermissions = Set (
-      IpPermission (
-        fromPort = Some(7001),
-        toPort = Some(7001),
-        ipProtocol = "tcp",
-        ipRanges = Set(),
-        userIdGroupPairs = userIdGroupPairs
-      ),
-      IpPermission (
-        fromPort = Some(7002),
-        toPort = Some(7002),
-        ipProtocol = "tcp",
-        ipRanges = Set(),
-        userIdGroupPairs = userIdGroupPairs
-      )
-    )
-    SecurityGroupState (appName, ipPermissions, "")
   }
 
   private def constructAppSecurityGroupForElb(appName: String): SecurityGroupState = {
