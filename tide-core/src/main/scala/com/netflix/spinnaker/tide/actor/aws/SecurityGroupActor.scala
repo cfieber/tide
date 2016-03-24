@@ -19,24 +19,20 @@ package com.netflix.spinnaker.tide.actor.aws
 import akka.actor._
 import akka.contrib.pattern.ClusterSharding
 import akka.contrib.pattern.ShardRegion.Passivate
-import akka.persistence.{RecoveryFailure, RecoveryCompleted, PersistentActor}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor.{SecurityGroupComparableAttributes, DiffSecurityGroup}
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor.{GetDiff, DiffAttributes}
-import com.netflix.spinnaker.tide.actor.service.CloudDriverActor.CloudDriverResponse
 import com.netflix.spinnaker.tide.actor.service.{CloudDriverActor, ConstructCloudDriverOperations}
 import com.netflix.spinnaker.tide.model._
 import AwsApi._
 import scala.beans.BeanProperty
 import scala.concurrent.duration.DurationInt
 
-class SecurityGroupActor extends PersistentActor with ActorLogging {
-
-  override def persistenceId: String = self.path.name
+class SecurityGroupActor extends Actor with ActorLogging {
 
   private implicit val dispatcher = context.dispatcher
-  context.setReceiveTimeout(5 minutes)
+  context.setReceiveTimeout(2 minutes)
 
   val clusterSharding = ClusterSharding.get(context.system)
 
@@ -44,7 +40,7 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
   var desiredState: Option[UpsertSecurityGroup] = None
   var latestState: Option[SecurityGroupLatestState] = None
 
-  override def receiveCommand: Receive = {
+  override def receive: Receive = {
     case ReceiveTimeout => context.parent ! Passivate(stopMessage = PoisonPill)
 
     case wrapper: AwsResourceProtocol[_] =>
@@ -61,35 +57,29 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
     case event: ClearLatestState =>
       this.awsReference = newAwsReference
       if (latestState.isDefined) {
-        persist(event) { it =>
-          updateState(it)
-          val comparableEvent = DiffSecurityGroup(awsReference, None)
-          clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
-        }
+        latestState = None
+        desiredState = None
+        val comparableEvent = DiffSecurityGroup(awsReference, None)
+        clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
       }
 
     case event: UpsertSecurityGroup =>
       this.awsReference = newAwsReference
       if (desiredState != Option(event)) {
-        persist(event) { e =>
-          updateState(event)
-          desiredState.foreach(mutate)
-        }
+        desiredState = Option(event)
+        desiredState.foreach(mutate)
       }
 
     case event: SecurityGroupLatestState =>
       this.awsReference = newAwsReference
       if (latestState != Option(event)) {
-        persist(event) { e =>
-          updateState(event)
-          val comparableEvent = DiffSecurityGroup(awsReference,
-            Option(SecurityGroupComparableAttributes.from(event.state)))
-          clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
-          desiredState.foreach(mutate)
-        }
-      } else {
-        desiredState.foreach(mutate)
+        latestState = Option(event)
+        desiredState = None
+        val comparableEvent = DiffSecurityGroup(awsReference,
+          Option(SecurityGroupComparableAttributes.from(event.state)))
+        clusterSharding.shardRegion(AttributeDiffActor.typeName) ! comparableEvent
       }
+      desiredState.foreach(mutate)
 
   }
 
@@ -114,25 +104,6 @@ class SecurityGroupActor extends PersistentActor with ActorLogging {
       case Some(latest) =>
         desiredState = None
     }
-  }
-
-  private def updateState(event: Any) = {
-    event match {
-      case event: UpsertSecurityGroup =>
-        desiredState = Option(event)
-      case event: SecurityGroupLatestState =>
-        latestState = Option(event)
-      case event: ClearLatestState =>
-        latestState = None
-      case _ => Nil
-    }
-  }
-
-  override def receiveRecover: Receive = {
-    case msg: RecoveryFailure => log.error(msg.cause, msg.cause.toString)
-    case RecoveryCompleted => Nil
-    case event: Any =>
-      updateState(event)
   }
 
 }

@@ -18,7 +18,6 @@ package com.netflix.spinnaker.tide.actor.aws
 
 import akka.actor._
 import akka.contrib.pattern.ShardRegion._
-import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import com.netflix.spinnaker.tide.actor.ClusteredActorObject
 import com.netflix.spinnaker.tide.actor.aws.PipelineActor.{PipelineDetails, GetPipeline}
 import com.netflix.spinnaker.tide.model.Front50Service.PipelineState
