@@ -251,14 +251,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     val desiredStateSafeDescription = desiredState.copy(
       description = desiredState.description.replaceAll("[^A-Za-z0-9. _-]", "")
     )
-    val securityGroupStateWithoutLegacySuffixes = desiredStateSafeDescription.
-      removeLegacySuffixesFromSecurityGroupIngressRules()
-    val vpcTransformation = new VpcTransformations().getVpcTransformation(task.source.vpcName, task.target.vpcName)
-    vpcTransformation.log.toSet[String].foreach { msg =>
-      sendTaskEvent(Log(taskId, msg))
-    }
-    val translatedIpPermissions = vpcTransformation.translateIpPermissions(resource.ref, securityGroupStateWithoutLegacySuffixes)
-    val newSecurityGroupState = securityGroupStateWithoutLegacySuffixes.copy(ipPermissions = translatedIpPermissions)
+    val newSecurityGroupState = desiredStateSafeDescription.removeLegacySuffixesFromSecurityGroupIngressRules()
     val upsert = UpsertSecurityGroup(newSecurityGroupState, overwrite = true)
     upsert
   }
