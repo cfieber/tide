@@ -259,13 +259,17 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     }
     val translatedIpPermissions = vpcTransformation.translateIpPermissions(resource.ref, securityGroupStateWithoutLegacySuffixes)
     val newSecurityGroupState = securityGroupStateWithoutLegacySuffixes.copy(ipPermissions = translatedIpPermissions)
-    val upsert = UpsertSecurityGroup(newSecurityGroupState, overwrite = false)
+    val upsert = UpsertSecurityGroup(newSecurityGroupState, overwrite = true)
     upsert
   }
 
   def constructIngressForNewSecurityGroup(groupName: String, securityGroupState: SecurityGroupState): Set[IpPermission] = {
-    val sameAccountIpPermissions = filterOutCrossAccountIngress(groupName, securityGroupState)
-    appendBoilerplateIngress(groupName, sameAccountIpPermissions)
+    if (task.requiredSecurityGroupNames.contains(groupName)) {
+      val sameAccountIpPermissions = filterOutCrossAccountIngress(groupName, securityGroupState)
+      appendBoilerplateIngress(groupName, sameAccountIpPermissions)
+    } else {
+      Set()
+    }
   }
 
   def appendBoilerplateIngress(groupName: String, ipPermissions: Set[IpPermission]): Set[IpPermission] = {
