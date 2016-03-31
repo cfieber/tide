@@ -33,10 +33,6 @@ case class ResourceTracker(source: VpcLocation, target: VpcLocation, vpcIds: Vpc
     targetResourcesFound += targetResource
   }
 
-  def nonexistentTarget(targetResource: TargetResource[_]): Unit = {
-    targetResourcesNonexistent += targetResource
-  }
-
   def isRequiredSource(sourceResource: SourceResource[_ <: AwsIdentity]): Boolean = {
     val targetResource = transformToTarget(sourceResource)
     targetResourcesRequired.contains(targetResource)
@@ -44,10 +40,6 @@ case class ResourceTracker(source: VpcLocation, target: VpcLocation, vpcIds: Vpc
 
   def isFoundTarget(targetResource: TargetResource[_ <: AwsIdentity]): Boolean = {
     targetResourcesFound.contains(targetResource)
-  }
-
-  def isNonexistentTarget(targetResource: TargetResource[_]): Boolean = {
-    targetResourcesNonexistent.contains(targetResource)
   }
 
   def transformToTarget[T <: AwsIdentity](sourceResource: SourceResource[T]): TargetResource[T] = {

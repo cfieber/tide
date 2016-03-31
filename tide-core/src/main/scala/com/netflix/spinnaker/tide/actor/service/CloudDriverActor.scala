@@ -83,7 +83,7 @@ object CloudDriverActor extends SingletonActorObject {
 object ConstructCloudDriverOperations {
 
   def constructUpsertSecurityGroupOperation(awsReference: AwsReference[SecurityGroupIdentity],
-                                            securityGroupState: SecurityGroupState): UpsertSecurityGroupOperation = {
+                                            securityGroupState: SecurityGroupState, ingressAppendOnly: Boolean = true): UpsertSecurityGroupOperation = {
     var securityGroupIngress: Set[SecurityGroupIngress] = Set()
     var ipIngress: Set[IpIngress] = Set()
     securityGroupState.ipPermissions.foreach { ipPermission =>
@@ -98,7 +98,8 @@ object ConstructCloudDriverOperations {
       awsReference.identity.groupName,
       securityGroupState.description,
       securityGroupIngress,
-      ipIngress)
+      ipIngress,
+      ingressAppendOnly)
   }
 
   def constructUpsertLoadBalancerOperation(awsReference: AwsReference[LoadBalancerIdentity],
