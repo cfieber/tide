@@ -20,8 +20,8 @@ case class SecurityGroupConventions(appName: String) {
     )
   }
 
-  def constructAppElbIpPermission: IpPermission = {
-    IpPermission (
+  def constructAppIngress: Set[IpPermission] = {
+    Set(IpPermission (
       fromPort = Some(7001),
       toPort = Some(7002),
       ipProtocol = "tcp",
@@ -33,11 +33,11 @@ case class SecurityGroupConventions(appName: String) {
           userId = ""
         )
       )
-    )
+    ))
   }
 
-  def constructAppSecurityGroupForElb: SecurityGroupState = {
-    var ipPermissions = Set(
+  def constructElbIngress: Set[IpPermission] = {
+    Set(
       IpPermission(
         fromPort = Some(80),
         toPort = Some(80),
@@ -53,7 +53,6 @@ case class SecurityGroupConventions(appName: String) {
         userIdGroupPairs = Set()
       )
     )
-    SecurityGroupState(appSecurityGroupForElbName, ipPermissions, "")
   }
 
 }
