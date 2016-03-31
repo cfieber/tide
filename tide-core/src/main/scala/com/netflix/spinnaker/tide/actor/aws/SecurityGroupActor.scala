@@ -24,6 +24,7 @@ import com.netflix.spinnaker.tide.actor.aws.SecurityGroupActor.{SecurityGroupCom
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor.{GetDiff, DiffAttributes}
 import com.netflix.spinnaker.tide.actor.service.{CloudDriverActor, ConstructCloudDriverOperations}
+import com.netflix.spinnaker.tide.model.CloudDriverService.UpsertSecurityGroupOperation
 import com.netflix.spinnaker.tide.model._
 import AwsApi._
 import scala.beans.BeanProperty
@@ -94,18 +95,21 @@ class SecurityGroupActor extends Actor with ActorLogging {
         }
         cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
       case Some(latest) if upsertSecurityGroup.overwrite || latest.state.ipPermissions.isEmpty =>
-        val latestOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, latest.state)
-        val upsertOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, upsertSecurityGroup.state)
-        if (latestOp != upsertOp) {
-          cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
-        } else {
+        if (isDesiredStateRealized(upsertSecurityGroup, latest)) {
           desiredState = None
+        } else {
+          cloudDriverActor ! AwsResourceProtocol(awsReference, upsertSecurityGroup)
         }
       case Some(latest) =>
         desiredState = None
     }
   }
 
+  def isDesiredStateRealized(upsertSecurityGroup: UpsertSecurityGroup, latest: SecurityGroupLatestState): Boolean = {
+    val latestOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, latest.state)
+    val upsertOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, upsertSecurityGroup.state)
+    upsertOp.securityGroupIngress.subsetOf(latestOp.securityGroupIngress) && upsertOp.ipIngress.subsetOf(latestOp.ipIngress)
+  }
 }
 
 object SecurityGroupActor extends ClusteredActorObject {

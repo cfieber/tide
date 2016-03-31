@@ -6,7 +6,7 @@ import akka.persistence.{RecoveryFailure, PersistentActor, RecoveryCompleted}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.TaskActorObject
 import com.netflix.spinnaker.tide.actor.aws.{LoadBalancerActor, SecurityGroupActor}
-import com.netflix.spinnaker.tide.actor.copy.DependencyCopyActor.{FoundTarget, RequiresSource, NonexistentTarget, DependencyCopyTaskResult, DependencyCopyTask, VpcIds, CheckCompletion, SourceSecurityGroup, TargetSecurityGroup}
+import com.netflix.spinnaker.tide.actor.copy.DependencyCopyActor.{FoundTarget, RequiresSource, DependencyCopyTaskResult, DependencyCopyTask, VpcIds, CheckCompletion, SourceSecurityGroup, TargetSecurityGroup}
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.{LatestVpcs, GetVpcs}
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
@@ -128,19 +128,11 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         }
       }
 
-    case event: NonexistentTarget =>
-      if (!resourceTracker.isNonexistentTarget(event.target)) {
-        persist(event) { e =>
-          updateState(e)
-        }
-      }
-
     case event: LoadBalancerDetails =>
       resourceTracker.asResource(event.awsReference) match {
         case resource: TargetResource[LoadBalancerIdentity] =>
           event.latestState match {
             case None =>
-              self ! NonexistentTarget(resource)
               val sourceResource = resourceTracker.getSourceByTarget(resource)
               clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(sourceResource.ref, GetLoadBalancer())
             case Some(latestState) =>
@@ -158,30 +150,28 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
               }
               val targetResource = resourceTracker.transformToTarget(resource)
               val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
-              if (resourceTracker.isNonexistentTarget(targetResource)) {
-                sendTaskEvent(Mutation(taskId, Create(), CreateAwsResource(targetResource.ref, referencingSource)))
-                if (task.dryRun) {
-                  self ! FoundTarget(targetResource)
-                } else {
-                  val loadBalancerStateForTargetVpc = latestState.state.forVpc(task.target.vpcName, vpcIds.target)
-                    .removeLegacySuffixesFromSecurityGroups()
-                  val newLoadBalancerState = (vpcIds.target, task.appName) match {
-                    case (Some(_), Some(appName)) =>
-                      val securityGroupsIncludingAppElbSecurityGroup = loadBalancerStateForTargetVpc.securityGroups +
-                        SecurityGroupConventions(appName).appSecurityGroupForElbName
-                      loadBalancerStateForTargetVpc.copy(securityGroups = securityGroupsIncludingAppElbSecurityGroup)
-                    case _ => loadBalancerStateForTargetVpc
-                  }
-                  val upsert = UpsertLoadBalancer(newLoadBalancerState, overwrite = false)
-                  logCreateEvent(targetResource, referencingSource)
-                  clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(targetResource.ref, upsert)
+              sendTaskEvent(Mutation(taskId, Create(), CreateAwsResource(targetResource.ref, referencingSource)))
+              if (task.dryRun) {
+                self ! FoundTarget(targetResource)
+              } else {
+                val loadBalancerStateForTargetVpc = latestState.state.forVpc(task.target.vpcName, vpcIds.target)
+                  .removeLegacySuffixesFromSecurityGroups()
+                val newLoadBalancerState = (vpcIds.target, task.appName) match {
+                  case (Some(_), Some(appName)) =>
+                    val securityGroupsIncludingAppElbSecurityGroup = loadBalancerStateForTargetVpc.securityGroups +
+                      SecurityGroupConventions(appName).appSecurityGroupForElbName
+                    loadBalancerStateForTargetVpc.copy(securityGroups = securityGroupsIncludingAppElbSecurityGroup)
+                  case _ => loadBalancerStateForTargetVpc
                 }
+                val upsert = UpsertLoadBalancer(newLoadBalancerState, overwrite = false)
+                logCreateEvent(targetResource, referencingSource)
+                clusterSharding.shardRegion(LoadBalancerActor.typeName) ! AwsResourceProtocol(targetResource.ref, upsert)
               }
           }
         case other => Nil
       }
 
-    case event: SecurityGroupDetails if !complete =>
+    case event: SecurityGroupDetails =>
       resourceTracker.asResource(event.awsReference) match {
         case resource: TargetResource[SecurityGroupIdentity] =>
           findSourceForTargetSecurityGroup(event.latestState, resource)
@@ -199,15 +189,9 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         if (task.dryRun) {
           persist(TargetSecurityGroup(resource, "nonexistant"))(it => updateState(it))
         }
-        self ! NonexistentTarget(resource)
       case Some(latestState) =>
         persist(TargetSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
-        if (latestState.state.ipPermissions.isEmpty) {
-          self ! NonexistentTarget(resource)
-          self ! FoundTarget(resource)
-        } else {
-          self ! FoundTarget(resource)
-        }
+        self ! FoundTarget(resource)
     }
     val sourceResource = resourceTracker.getSourceByTarget(resource)
     clusterSharding.shardRegion(SecurityGroupActor.typeName) ! AwsResourceProtocol(sourceResource.ref, GetSecurityGroup())
@@ -231,8 +215,8 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     }
     val targetResource = resourceTracker.transformToTarget(resource)
     val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
-    if (resourceTracker.isNonexistentTarget(targetResource)) {
-      val newIpPermissions: Set[IpPermission] = constructIngressForNewSecurityGroup(groupName, desiredState)
+    val newIpPermissions: Set[IpPermission] = constructIngressForNewSecurityGroup(groupName, desiredState)
+    if (!groupName.startsWith("nf-")) {
       requireIngressSecurityGroups(newIpPermissions, targetResource.ref)
       sendTaskEvent(Mutation(taskId, Create(), CreateAwsResource(targetResource.ref, referencingSource)))
       if (task.dryRun) {
@@ -320,7 +304,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       case None => ""
       case Some(source) => s" because of reference from ${source.akkaIdentifier}."
     }
-    sendTaskEvent(Log(taskId, s"Creating ${targetResource.ref.identity.akkaIdentifier}$reasonMsg."))
+    sendTaskEvent(Log(taskId, s"Updating ${targetResource.ref.identity.akkaIdentifier}$reasonMsg."))
   }
 
   def updateState(event: Any) = {
@@ -338,8 +322,6 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         resourceTracker.requiredSource(source, referencedBy)
       case FoundTarget(target) =>
         resourceTracker.foundTarget(target)
-      case NonexistentTarget(target) =>
-        resourceTracker.nonexistentTarget(target)
       case event: SourceSecurityGroup =>
         resourceTracker.addSourceSecurityGroupId(event.source, event.id)
       case event: TargetSecurityGroup =>
