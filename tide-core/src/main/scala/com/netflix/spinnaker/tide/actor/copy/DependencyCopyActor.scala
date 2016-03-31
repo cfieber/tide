@@ -241,12 +241,12 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   }
 
   def constructIngressForNewSecurityGroup(groupName: String, securityGroupState: SecurityGroupState): Set[IpPermission] = {
-    if (task.requiredSecurityGroupNames.contains(groupName)) {
-      val sameAccountIpPermissions = filterOutCrossAccountIngress(groupName, securityGroupState)
-      appendBoilerplateIngress(groupName, sameAccountIpPermissions)
+    val newIngress: Set[IpPermission] = if (task.requiredSecurityGroupNames.contains(groupName)) {
+      filterOutCrossAccountIngress(groupName, securityGroupState)
     } else {
       Set()
     }
+    appendBoilerplateIngress(groupName, newIngress)
   }
 
   def appendBoilerplateIngress(groupName: String, ipPermissions: Set[IpPermission]): Set[IpPermission] = {
