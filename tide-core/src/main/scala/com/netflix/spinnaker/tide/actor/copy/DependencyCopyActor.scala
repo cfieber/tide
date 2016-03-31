@@ -203,12 +203,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     val desiredState: SecurityGroupState = latestStateOption match {
       case None =>
         persist(SourceSecurityGroup(resource, "nonexistant"))(it => updateState(it))
-        task.appName match {
-          case Some(appName) if groupName == SecurityGroupConventions(appName).appSecurityGroupForElbName =>
-            SecurityGroupConventions(appName).constructAppSecurityGroupForElb
-          case _ =>
-            SecurityGroupState(groupName, Set(), "")
-        }
+        SecurityGroupState(groupName, Set(), "")
       case Some(latestState) =>
         persist(SourceSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
         latestState.state
@@ -257,10 +252,13 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         } else {
           ipPermissions
         }
-        if (groupName == appName) {
-          ipPermissionsWithClassicLink + SecurityGroupConventions(appName).constructAppElbIpPermission
-        } else {
-          ipPermissionsWithClassicLink
+        groupName match {
+          case name if name == appName =>
+            ipPermissionsWithClassicLink ++ SecurityGroupConventions(appName).constructAppIngress
+          case name if name == SecurityGroupConventions(appName).appSecurityGroupForElbName =>
+            ipPermissionsWithClassicLink ++ SecurityGroupConventions(appName).constructElbIngress
+          case _ =>
+            ipPermissionsWithClassicLink
         }
       case _ =>
         ipPermissions
