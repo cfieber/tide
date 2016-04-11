@@ -1,12 +1,10 @@
 package com.netflix.spinnaker.tide.transform
 
-import com.netflix.spinnaker.tide.model.AwsApi.{SecurityGroupState, UserIdGroupPairs, IpPermission}
+import com.netflix.spinnaker.tide.model.AwsApi.{AccountIdentifier, UserIdGroupPairs, IpPermission}
 
-case class SecurityGroupConventions(appName: String) {
+case class SecurityGroupConventions(appName: String, accountName: String, vpcName: Option[String]) {
 
-  def appSecurityGroupForElbName = s"$appName-elb"
-
-  def constructClassicLinkIpPermission: IpPermission = {
+  private def constructClassicLinkIpPermission: IpPermission = {
     IpPermission (
       fromPort = Some(80),
       toPort = Some(65535),
@@ -15,12 +13,13 @@ case class SecurityGroupConventions(appName: String) {
       userIdGroupPairs = Set(UserIdGroupPairs(
         groupId = None,
         groupName = Some("nf-classiclink"),
-        userId = ""
+        AccountIdentifier("", Some(accountName)),
+        vpcName
       ))
     )
   }
 
-  def constructAppIngress: Set[IpPermission] = {
+  private def constructAppIngress: Set[IpPermission] = {
     Set(IpPermission (
       fromPort = Some(7001),
       toPort = Some(7002),
@@ -29,14 +28,15 @@ case class SecurityGroupConventions(appName: String) {
       userIdGroupPairs = Set (
         UserIdGroupPairs (
           groupId = None,
-          groupName = Some(appSecurityGroupForElbName),
-          userId = ""
+          groupName = Some(SecurityGroupConventions.appSecurityGroupForElbName(appName)),
+          AccountIdentifier("", Some(accountName)),
+          vpcName
         )
       )
     ))
   }
 
-  def constructElbIngress: Set[IpPermission] = {
+  private def constructElbIngress: Set[IpPermission] = {
     Set(
       IpPermission(
         fromPort = Some(80),
@@ -55,4 +55,27 @@ case class SecurityGroupConventions(appName: String) {
     )
   }
 
+  def appendBoilerplateIngress(groupName: String, allowIngressFromClassic: Boolean): Set[IpPermission] = {
+    groupName match {
+      case name if name == appName =>
+        addClassicLinkPermission(constructAppIngress, allowIngressFromClassic)
+      case name if name == SecurityGroupConventions.appSecurityGroupForElbName(appName) =>
+        addClassicLinkPermission(constructElbIngress, allowIngressFromClassic)
+      case _ =>
+        Set()
+    }
+  }
+
+  private def addClassicLinkPermission(ingress: Set[IpPermission], allowIngressFromClassic: Boolean): Set[IpPermission] = {
+    if (allowIngressFromClassic) {
+    ingress + constructClassicLinkIpPermission
+    } else {
+    ingress
+    }
+  }
+
+}
+
+object SecurityGroupConventions {
+  def appSecurityGroupForElbName(appName: String) = s"$appName-elb"
 }

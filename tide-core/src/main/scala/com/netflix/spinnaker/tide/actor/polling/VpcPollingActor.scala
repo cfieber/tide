@@ -21,6 +21,7 @@ import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.polling.AwsPollingActor.{AwsPoll, AwsPollingProtocol}
 import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.{LatestVpcs, GetVpcs}
+import com.netflix.spinnaker.tide.actor.service.CloudDriverActor
 import com.netflix.spinnaker.tide.model.{AwsConversion, AkkaClustered, AwsApi}
 import AwsApi._
 import scala.collection.JavaConversions._
@@ -69,7 +70,9 @@ class VpcPollingActor extends PollingActor {
         val latestVpcs = LatestVpcs(location, combinedVpcAttributes, subnets)
         clusterSharding.shardRegion(LoadBalancerPollingActor.typeName) ! latestVpcs
         clusterSharding.shardRegion(ServerGroupPollingActor.typeName) ! latestVpcs
+        clusterSharding.shardRegion(SecurityGroupPollingActor.typeName) ! latestVpcs
         clusterSharding.shardRegion(ClassicLinkInstancesActor.typeName) ! latestVpcs
+        clusterSharding.shardRegion(CloudDriverActor.typeName) ! latestVpcs
       }
   }
 

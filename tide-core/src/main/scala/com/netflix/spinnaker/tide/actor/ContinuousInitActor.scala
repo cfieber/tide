@@ -5,6 +5,7 @@ import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.clouddriver.aws.security.NetflixAmazonCredentials
 import com.netflix.spinnaker.clouddriver.security.AccountCredentialsRepository
 import com.netflix.spinnaker.tide.actor.ContinuousInitActor.Tick
+import com.netflix.spinnaker.tide.actor.polling.AwsPollingActor.AccountMetaData
 import com.netflix.spinnaker.tide.actor.polling.PollingDirector
 import com.netflix.spinnaker.tide.actor.polling.PollingDirector.PollInit
 import com.netflix.spinnaker.tide.actor.task.TaskDirector
@@ -32,11 +33,15 @@ class ContinuousInitActor(clusterSharding: ClusterSharding,
     case t: Tick =>
       val credentials: Set[NetflixAmazonCredentials] = accountCredentialsRepository.getAll.asScala.
         filter(p => p.isInstanceOf[NetflixAmazonCredentials]).map(p => p.asInstanceOf[NetflixAmazonCredentials]).toSet
-      val accountNamesToRegionNames: Map[String, Set[String]] = credentials.map{ credential =>
+      val accountNamesToRegionNames: Map[String, Set[String]] = credentials.map { credential =>
         val regionNames: Set[String] = credential.getRegions.asScala.map(_.getName).toSet
         credential.getName -> regionNames
       }.toMap
-      clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(accountNamesToRegionNames, classicLinkSecurityGroupNames)
+      val accountIdsToNames: Map[String, String] = credentials.map { credential =>
+        credential.getAccountId -> credential.getName
+      }.toMap
+      clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(accountNamesToRegionNames,
+        classicLinkSecurityGroupNames, AccountMetaData(accountIdsToNames))
       clusterSharding.shardRegion(TaskDirector.typeName) ! GetRunningTasks()
     case _ =>
   }

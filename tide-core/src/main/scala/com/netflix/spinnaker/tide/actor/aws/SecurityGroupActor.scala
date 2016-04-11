@@ -106,9 +106,9 @@ class SecurityGroupActor extends Actor with ActorLogging {
   }
 
   def isDesiredStateRealized(upsertSecurityGroup: UpsertSecurityGroup, latest: SecurityGroupLatestState): Boolean = {
-    val latestOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, latest.state)
-    val upsertOp = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(awsReference, upsertSecurityGroup.state)
-    upsertOp.securityGroupIngress.subsetOf(latestOp.securityGroupIngress) && upsertOp.ipIngress.subsetOf(latestOp.ipIngress)
+    val upsertIngress = AwsConversion.spreadIngress(upsertSecurityGroup.state.ipPermissions)
+    val latestIngress = AwsConversion.spreadIngress(latest.state.ipPermissions)
+    upsertIngress.subsetOf(latestIngress)
   }
 }
 

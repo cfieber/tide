@@ -6,7 +6,7 @@ import akka.contrib.pattern.ClusterSharding
 import com.netflix.spinnaker.tide.actor.SingletonActorObject
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor
 import com.netflix.spinnaker.tide.actor.classiclink.ClassicLinkInstancesActor.ClassicLinkSecurityGroupNames
-import com.netflix.spinnaker.tide.actor.polling.AwsPollingActor.AwsPoll
+import com.netflix.spinnaker.tide.actor.polling.AwsPollingActor.{AccountMetaData, AwsPoll}
 import com.netflix.spinnaker.tide.actor.polling.PipelinePollingActor.PipelinePoll
 import com.netflix.spinnaker.tide.actor.polling.PollingDirector.{Poll, PollInit}
 import com.netflix.spinnaker.tide.model.AwsApi.AwsLocation
@@ -50,7 +50,7 @@ class PollingDirector extends Actor {
         for (regionName <- regionNames) {
           val location = AwsLocation(accountName, regionName)
           for (poller <- pollers) {
-            getShardCluster(poller.typeName) ! AwsPoll(location)
+            getShardCluster(poller.typeName) ! AwsPoll(location, pollInit.accountMetaData)
           }
           val classicLinkSecurityGroupNames: Seq[String] = pollInit.classicLinkSecurityGroupNames
           getShardCluster(ClassicLinkInstancesActor.typeName) ! ClassicLinkSecurityGroupNames(location,
@@ -67,7 +67,8 @@ sealed trait PollingDirectorProtocol extends Serializable
 object PollingDirector extends SingletonActorObject {
   val props = Props[PollingDirector]
 
-  case class PollInit(accountNamesToRegionNames: Map[String, Set[String]], classicLinkSecurityGroupNames: Seq[String]) extends PollingDirectorProtocol
+  case class PollInit(accountNamesToRegionNames: Map[String, Set[String]], classicLinkSecurityGroupNames: Seq[String],
+                      accountMetaData: AccountMetaData) extends PollingDirectorProtocol
   case class Poll() extends PollingDirectorProtocol
 
 }

@@ -19,6 +19,7 @@ package com.netflix.spinnaker.tide.actor.service
 import akka.actor.{ActorLogging, Props}
 import com.netflix.frigga.Names
 import com.netflix.spinnaker.tide.actor.SingletonActorObject
+import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.LatestVpcs
 import com.netflix.spinnaker.tide.model.AwsApi._
 import com.netflix.spinnaker.tide.model._
 import CloudDriverActor.{CloudDriverResponse, GetTaskDetail}
@@ -28,10 +29,12 @@ import retrofit.RestAdapter.LogLevel
 
 class CloudDriverActor extends RetrofitServiceActor[CloudDriverService] with ActorLogging {
 
+  var vpcs: Map[AwsLocation, Seq[Vpc]] = Map()
+
   def operational: Receive = {
     case AwsResourceProtocol(awsReference, event: UpsertSecurityGroup) =>
       val ref = awsReference.asInstanceOf[AwsReference[SecurityGroupIdentity]]
-      val op = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(ref, event.state)
+      val op = ConstructCloudDriverOperations.constructUpsertSecurityGroupOperation(ref, event.state, vpcs)
       val taskResult = service.submitTask(op.content())
       sender() ! CloudDriverResponse(service.getTaskDetail(taskResult.id))
       waitBetweenEventsToAvoidThrottling()
@@ -57,6 +60,10 @@ class CloudDriverActor extends RetrofitServiceActor[CloudDriverService] with Act
 
     case event: GetTaskDetail =>
       sender() ! CloudDriverResponse(service.getTaskDetail(event.id))
+
+    case event: LatestVpcs =>
+      vpcs += (event.location -> event.vpcs)
+
   }
 
   def waitBetweenEventsToAvoidThrottling() = {
@@ -83,12 +90,20 @@ object CloudDriverActor extends SingletonActorObject {
 object ConstructCloudDriverOperations {
 
   def constructUpsertSecurityGroupOperation(awsReference: AwsReference[SecurityGroupIdentity],
-                                            securityGroupState: SecurityGroupState, ingressAppendOnly: Boolean = true): UpsertSecurityGroupOperation = {
+                                            securityGroupState: SecurityGroupState,
+                                            vpcs: Map[AwsLocation, Seq[Vpc]],
+                                            ingressAppendOnly: Boolean = true): UpsertSecurityGroupOperation = {
     var securityGroupIngress: Set[SecurityGroupIngress] = Set()
     var ipIngress: Set[IpIngress] = Set()
     securityGroupState.ipPermissions.foreach { ipPermission =>
       ipPermission.userIdGroupPairs.foreach { userIdGroupPair =>
-        securityGroupIngress += SecurityGroupIngress.from(userIdGroupPair.groupName.get, ipPermission)
+        val vpcId: Option[String] = userIdGroupPair.vpcName match {
+          case Some(vpcName) =>
+            val vpcsForLocationOption = vpcs.get(awsReference.location.copy(account = userIdGroupPair.account.name.get))
+            vpcsForLocationOption.flatMap(_.find(_.name == vpcName).flatMap(_.name))
+          case None => None
+        }
+        securityGroupIngress += SecurityGroupIngress.from(userIdGroupPair, ipPermission, vpcId)
       }
       ipPermission.ipRanges.foreach(ipIngress += IpIngress.from(_, ipPermission))
     }

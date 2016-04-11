@@ -24,6 +24,7 @@ object AwsPollingActor {
     val location: AwsLocation
     def pollingIdentifier = location.akkaIdentifier
   }
-  case class AwsPoll(location: AwsLocation) extends AwsPollingProtocol with Poll
+  case class AccountMetaData(accountIdsToNames: Map[String, String])
+  case class AwsPoll(location: AwsLocation, accountMetaData: AccountMetaData) extends AwsPollingProtocol with Poll
 }
 
