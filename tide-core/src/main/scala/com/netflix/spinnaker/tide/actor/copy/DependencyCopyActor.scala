@@ -246,10 +246,14 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   def constructIngressForNewSecurityGroup(groupName: String, securityGroupState: SecurityGroupState): Set[IpPermission] = {
     if (task.skipAllIngress || !task.requiredSecurityGroupNames.contains(groupName)) { return Set() }
     val spreadUserIdGroupPairs = AwsConversion.spreadUserIdGroupPairIngress(securityGroupState.ipPermissions)
-    val securityGroupIngress = spreadUserIdGroupPairs.filter { ipPermission =>
+    val filteredSecurityGroupIngress = spreadUserIdGroupPairs.filter { ipPermission =>
       val account = ipPermission.userIdGroupPairs.head.account
       account.id != "amazon-elb" && account.name.isDefined
     }
+    val securityGroupIngress = for (
+      permission <- filteredSecurityGroupIngress;
+      userIdGroupPair <- permission.userIdGroupPairs
+    ) yield permission.copy(userIdGroupPairs = Set(userIdGroupPair.copy(vpcName = task.target.vpcName)))
     val ipIngress = AwsConversion.spreadIpRangeIngress(securityGroupState.ipPermissions)
     val newIngress = securityGroupIngress ++ ipIngress
     task.appName match {
