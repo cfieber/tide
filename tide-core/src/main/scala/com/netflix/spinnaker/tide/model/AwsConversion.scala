@@ -1,5 +1,6 @@
 package com.netflix.spinnaker.tide.model
 
+import com.netflix.spinnaker.tide.actor.polling.AwsPollingActor.AccountMetaData
 import com.netflix.spinnaker.tide.model.AwsApi._
 import scala.collection.JavaConversions._
 import com.amazonaws.services.ec2.{model ⇒ awsEc2}
@@ -147,7 +148,8 @@ object AwsConversion {
     )
   }
 
-  def securityGroupFrom(awsSecurityGroup: awsEc2.SecurityGroup): SecurityGroup = {
+  def securityGroupFrom(awsSecurityGroup: awsEc2.SecurityGroup, accountMetaData: AccountMetaData,
+                        vpcs: Seq[Vpc]): SecurityGroup = {
     val awsIpPermissions: Set[awsEc2.IpPermission] = Option(awsSecurityGroup.getIpPermissions) match {
       case Some(permissions) => permissions.toSet
       case _ => Set()
@@ -157,14 +159,15 @@ object AwsConversion {
       groupId = awsSecurityGroup.getGroupId,
       identity = SecurityGroupIdentity(awsSecurityGroup.getGroupName, Option(awsSecurityGroup.getVpcId)),
       state = SecurityGroupState(
-        ownerId = awsSecurityGroup.getOwnerId,
         description = awsSecurityGroup.getDescription,
         ipPermissions = awsIpPermissions.map { awsIpPermission =>
           val userIdGroupPairs = awsIpPermission.getUserIdGroupPairs.map { awsUserIdGroupPair =>
             UserIdGroupPairs(
               groupId = Option(awsUserIdGroupPair.getGroupId),
               groupName = Option(awsUserIdGroupPair.getGroupName),
-              userId = awsUserIdGroupPair.getUserId
+              account = AccountIdentifier(awsUserIdGroupPair.getUserId,
+                accountMetaData.accountIdsToNames.get(awsUserIdGroupPair.getUserId)),
+              vpcName = vpcs.find(_.vpcId == awsUserIdGroupPair.getVpcId).flatMap(_.name)
             )
           }.toSet
           val fromPort: Option[Int] = Option(awsIpPermission.getFromPort).map {_.toInt}
@@ -179,6 +182,24 @@ object AwsConversion {
         }
       )
     )
+  }
+
+  def spreadUserIdGroupPairIngress(ingress: Set[IpPermission]): Set[IpPermission] = {
+    for (
+      permission <- ingress;
+      userIdGroupPair <- permission.userIdGroupPairs
+    ) yield permission.copy(userIdGroupPairs = Set(userIdGroupPair))
+  }
+
+  def spreadIpRangeIngress(ingress: Set[IpPermission]): Set[IpPermission] = {
+    for (
+      permission <- ingress;
+      ipRange <- permission.ipRanges
+    ) yield permission.copy(ipRanges = Set(ipRange))
+  }
+  
+  def spreadIngress(ingress: Set[IpPermission]): Set[IpPermission] = {
+    spreadUserIdGroupPairIngress(ingress) ++ spreadIpRangeIngress(ingress)
   }
 
 }

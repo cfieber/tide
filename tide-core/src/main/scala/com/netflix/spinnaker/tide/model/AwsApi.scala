@@ -100,13 +100,13 @@ object AwsApi {
     }
   }
 
-  case class SecurityGroupState(description: String, ipPermissions: Set[IpPermission], ownerId: String)  extends AwsProtocol {
+  case class SecurityGroupState(description: String, ipPermissions: Set[IpPermission])  extends AwsProtocol {
     def ensureSecurityGroupNameOnIngressRules(securityGroupIdToName: Map[String, SecurityGroupIdentity]): SecurityGroupState = {
       val newIpPermissions = ipPermissions.map { ipPermission =>
         val newUserIdGroupPairs = ipPermission.userIdGroupPairs.map {
-          case pair @ UserIdGroupPairs(_, Some(groupName), _) => pair
-          case pair @ UserIdGroupPairs(Some(groupId), None, userId) =>
-            UserIdGroupPairs(Option(groupId), securityGroupIdToName.get(groupId).map(_.groupName), userId)
+          case pair @ UserIdGroupPairs(_, Some(groupName), _, _) => pair
+          case pair @ UserIdGroupPairs(Some(groupId), None, _, _) =>
+            pair.copy(groupName = securityGroupIdToName.get(groupId).map(_.groupName))
         }
         ipPermission.copy(userIdGroupPairs = newUserIdGroupPairs)
       }
@@ -117,7 +117,7 @@ object AwsApi {
       val newIpPermissions = ipPermissions.map { ipPermission =>
         val newUserIdGroupPairs = ipPermission.userIdGroupPairs.map { userGroupPair =>
           val newGroupName: Option[String] = userGroupPair.groupName.map(SecurityGroupIdentity(_).dropLegacySuffix.groupName)
-          UserIdGroupPairs(None, newGroupName, userGroupPair.userId)
+          UserIdGroupPairs(None, newGroupName, userGroupPair.account, userGroupPair.vpcName)
         }
         ipPermission.copy(userIdGroupPairs = newUserIdGroupPairs)
       }
@@ -131,7 +131,7 @@ object AwsApi {
                           ipRanges: Set[String],
                           userIdGroupPairs: Set[UserIdGroupPairs])
 
-  case class UserIdGroupPairs(groupId: Option[String], groupName: Option[String], userId: String)
+  case class UserIdGroupPairs(groupId: Option[String], groupName: Option[String], account: AccountIdentifier, vpcName: Option[String])
 
   case class LoadBalancerIdentity(loadBalancerName: String) extends AwsIdentity {
     @JsonIgnore def akkaIdentifier: String = s"LoadBalancer.$loadBalancerName"
@@ -296,4 +296,6 @@ object AwsApi {
   case class VpcClassicLink(vpcId: String, classicLinkEnabled: Boolean)
 
   case class Instance(instanceId: String, lifecycleState: String, healthStatus: String, launchConfigurationName: String)
+
+  case class AccountIdentifier(id: String, name: Option[String])
 }
