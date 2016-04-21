@@ -34,7 +34,9 @@ object Front50Service {
   case class Pipeline(id: String, @JsonUnwrapped @JsonProperty("state") state: PipelineState)
 
   case class PipelineState(name: String, application: String, parallel: Boolean, triggers: Seq[Map[String, Any]],
-                           stages: Seq[Map[String, Any]]) {
+                           stages: Seq[Map[String, Any]],
+                           notifications: Seq[Map[String, Any]],
+                           parameterConfig: Seq[Map[String, Any]]) {
 
     def disableTriggers(): PipelineState = {
       val newTriggers: Seq[Map[String, Any]] = triggers.map { trigger =>
