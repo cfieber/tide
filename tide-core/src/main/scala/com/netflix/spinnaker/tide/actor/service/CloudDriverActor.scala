@@ -100,7 +100,7 @@ object ConstructCloudDriverOperations {
         val vpcId: Option[String] = userIdGroupPair.vpcName match {
           case Some(vpcName) =>
             val vpcsForLocationOption = vpcs.get(awsReference.location.copy(account = userIdGroupPair.account.name.get))
-            vpcsForLocationOption.flatMap(_.find(_.name == vpcName).flatMap(_.name))
+            vpcsForLocationOption.flatMap(_.find(_.name.contains(vpcName)).map(_.vpcId))
           case None => None
         }
         securityGroupIngress += SecurityGroupIngress.from(userIdGroupPair, ipPermission, vpcId)
