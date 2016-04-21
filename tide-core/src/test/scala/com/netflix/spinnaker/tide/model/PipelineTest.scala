@@ -84,7 +84,9 @@ class PipelineTest extends FlatSpec with GivenWhenThen with DiagrammedAssertions
           )
         )
       )
-    )
+    ),
+    List(Map("type" -> "notification")),
+    List(Map("parameterName" -> "the_param"))
   )
 
   it should "collect dependencies for a single deployment pipeline" in {
@@ -168,7 +170,9 @@ class PipelineTest extends FlatSpec with GivenWhenThen with DiagrammedAssertions
             )
           )
         )
-      )
+      ),
+      List(Map("type" -> "notification")),
+      List(Map("parameterName" -> "the_param"))
     )
     assert(migratedPipeline == expectedPipeline)
   }
