@@ -166,12 +166,13 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
     notes = "The pipeline and all of it's dependencies will be copied if they do not exist (security groups, load balancers used in deploy stages). Returns the task id.")
   @RequestMapping(value = Array("/pipeline/{id}/deepCopy"), method = Array(POST))
   def deepCopyPipeline(@PathVariable("id") id: String,
-                          @RequestParam(value = "allowIngressFromClassic", defaultValue = "true") allowIngressFromClassic: Boolean,
-                          @RequestParam(value = "dryRun", defaultValue = "false") dryRun: Boolean,
-                          @RequestBody pipelineVpcMigrateDefinition: PipelineVpcMigrateDefinition) = {
+                       @RequestParam(value = "allowIngressFromClassic", defaultValue = "true") allowIngressFromClassic: Boolean,
+                       @RequestParam(value = "subnetType", required = false) subnetType: String,
+                       @RequestParam(value = "dryRun", defaultValue = "false") dryRun: Boolean,
+                       @RequestBody pipelineVpcMigrateDefinition: PipelineVpcMigrateDefinition) = {
     val taskDescription = PipelineDeepCopyTask(id, pipelineVpcMigrateDefinition.sourceVpcName,
       pipelineVpcMigrateDefinition.targetVpcName,
-      allowIngressFromClassic = allowIngressFromClassic, dryRun = dryRun)
+      allowIngressFromClassic = allowIngressFromClassic, dryRun = dryRun, targetSubnetType = Option(subnetType))
     val future = (taskDirector ? taskDescription).mapTo[ExecuteTask]
     val task = Await.result(future, timeout.duration)
     task.taskId
@@ -184,11 +185,12 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
                           @PathVariable("region") region: String,
                           @PathVariable("asgName") asgName: String,
                           @RequestParam(value = "allowIngressFromClassic", defaultValue = "true") allowIngressFromClassic: Boolean,
+                          @RequestParam(value = "subnetType", required = false) targetSubnetType: String,
                           @RequestParam(value = "dryRun", defaultValue = "false") dryRun: Boolean,
                           @RequestBody target: VpcDefinition) = {
     val reference = AwsReference(AwsLocation(account, region), AutoScalingGroupIdentity(asgName))
     val taskDescription = ServerGroupDeepCopyTask(reference, target.toVpcLocation,
-      allowIngressFromClassic = allowIngressFromClassic, dryRun = dryRun)
+      allowIngressFromClassic = allowIngressFromClassic, dryRun = dryRun, targetSubnetType = Option(targetSubnetType))
     val future = (taskDirector ? taskDescription).mapTo[ExecuteTask]
     val task = Await.result(future, timeout.duration)
     task.taskId

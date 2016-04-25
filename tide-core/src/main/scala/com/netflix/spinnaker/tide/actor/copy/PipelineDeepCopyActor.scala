@@ -139,7 +139,7 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
 
     case event: StartPipelineCloning =>
       val pipelineWithDisabledTriggers = pipelineState.disableTriggers()
-      val migrator = ClusterVpcMigrator(task.sourceVpcName, task.targetVpcName, event.securityGroupIdMappingByLocation)
+      val migrator = ClusterVpcMigrator(task.sourceVpcName, task.targetVpcName, task.targetSubnetType, event.securityGroupIdMappingByLocation)
       val migratedPipeline = pipelineWithDisabledTriggers.applyVisitor(migrator)
       val newPipeline = migratedPipeline.copy(name = s"${migratedPipeline.name} - ${task.targetVpcName}")
       sendTaskEvent(Mutation(taskId, Create(), CreatePipeline(newPipeline)))
@@ -183,6 +183,7 @@ object PipelineDeepCopyActor extends ClusteredActorObject with TaskActorObject {
                                   sourceVpcName: Option[String],
                                   targetVpcName: String,
                                   allowIngressFromClassic: Boolean = true,
+                                  targetSubnetType: Option[String],
                                   dryRun: Boolean = false)
     extends TaskDescription with PipelineDeepCopyProtocol {
     val taskType: String = "PipelineDeepCopyTask"
@@ -193,14 +194,14 @@ object PipelineDeepCopyActor extends ClusteredActorObject with TaskActorObject {
 
 }
 
-case class ClusterVpcMigrator(sourceVpcName: Option[String], targetVpcName: String,
+case class ClusterVpcMigrator(sourceVpcName: Option[String], targetVpcName: String, targetSubnetType: Option[String],
                               securityGroupIdMappingByLocation: Map[AwsLocation, Map[String, String]]) extends ClusterVisitor {
   def visit(cluster: Cluster): Cluster = {
     val location = AwsLocation(cluster.getAccount, cluster.getRegion)
     val subnetType = cluster.getSubnetType
     val vpcName = AwsApi.getVpcNameFromSubnetType(subnetType)
     if (vpcName == sourceVpcName) {
-      val newSubnetType = AwsApi.constructTargetSubnetType(subnetType.getOrElse("internal"), Option(targetVpcName))
+      val newSubnetType = AwsApi.constructTargetSubnetType(targetSubnetType.getOrElse(subnetType.getOrElse("internal")), Option(targetVpcName))
       val newLoadBalancers = cluster.getLoadBalancersNames.map(LoadBalancerIdentity(_)
         .forVpc(sourceVpcName, Option(targetVpcName)).loadBalancerName)
       val newSecurityGroups = securityGroupIdMappingByLocation.get(location) match {
