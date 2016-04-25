@@ -111,7 +111,7 @@ class PipelineTest extends FlatSpec with GivenWhenThen with DiagrammedAssertions
     val pipeline = singleDeploymentPipeline
 
     When("vpc migrate visitor is applied")
-    val migrator = ClusterVpcMigrator(Option("Main"), "vpc0", Map(AwsLocation("prod", "us-west-1") ->
+    val migrator = ClusterVpcMigrator(Option("Main"), "vpc0", Option.empty, Map(AwsLocation("prod", "us-west-1") ->
       Map("sg-1234" -> "sg-5678", "sg-abcd" -> "sg-efgh")))
     val migratedPipeline = pipeline.applyVisitor(migrator)
 
@@ -175,6 +175,34 @@ class PipelineTest extends FlatSpec with GivenWhenThen with DiagrammedAssertions
       List(Map("parameterName" -> "the_param"))
     )
     assert(migratedPipeline == expectedPipeline)
+  }
+
+  it should "default to internal subnet when not specified" in {
+    Given("a pipeline with one deploy stage")
+    val pipeline = singleDeploymentPipeline
+
+    When("vpc migrate visitor is applied")
+    val migrator = ClusterVpcMigrator(Option("Main"), "vpc0", None, Map(AwsLocation("prod", "us-west-1") ->
+      Map("sg-1234" -> "sg-5678", "sg-abcd" -> "sg-efgh")))
+    val migratedPipeline = pipeline.applyVisitor(migrator)
+
+    Then("subnet is overridden")
+    val clusters: List[Map[String, Any]] = migratedPipeline.stages(1).get("clusters").get.asInstanceOf[List[Map[String, Any]]]
+    assert(clusters.head.get("subnetType").contains("internal (vpc0)"))
+  }
+
+  it should "migrate a single deployment pipeline, applying target subnet" in {
+    Given("a pipeline with one deploy stage")
+    val pipeline = singleDeploymentPipeline
+
+    When("vpc migrate visitor is applied")
+    val migrator = ClusterVpcMigrator(Option("Main"), "vpc0", Some("external"), Map(AwsLocation("prod", "us-west-1") ->
+      Map("sg-1234" -> "sg-5678", "sg-abcd" -> "sg-efgh")))
+    val migratedPipeline = pipeline.applyVisitor(migrator)
+
+    Then("subnet is overridden")
+    val clusters: List[Map[String, Any]] = migratedPipeline.stages(1).get("clusters").get.asInstanceOf[List[Map[String, Any]]]
+    assert(clusters.head.get("subnetType").contains("external (vpc0)"))
   }
 
 }

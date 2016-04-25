@@ -258,11 +258,11 @@ object AwsApi {
                                    maxSize: Int, minSize: Int, suspendedProcesses: Set[String],
                                    terminationPolicies: Set[String],
                                    subnetType: Option[String], vpcName: Option[String]) extends AwsProtocol {
-    def forVpc(sourceVpcName: Option[String], targetVpcName: Option[String]): AutoScalingGroupState = {
+    def forVpc(sourceVpcName: Option[String], targetVpcName: Option[String], targetSubnetType: Option[String]): AutoScalingGroupState = {
       val newLoadBalancerNames = loadBalancerNames.map(LoadBalancerIdentity(_).
         forVpc(sourceVpcName, targetVpcName).loadBalancerName)
       this.copy(loadBalancerNames = newLoadBalancerNames, vpcName = targetVpcName,
-        subnetType = constructTargetSubnetType(subnetType.getOrElse("internal"), targetVpcName),
+        subnetType = constructTargetSubnetType(targetSubnetType.getOrElse(subnetType.getOrElse("internal")), targetVpcName),
         VPCZoneIdentifier = ""
       )
     }
