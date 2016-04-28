@@ -12,11 +12,13 @@ import com.netflix.spinnaker.tide.actor.polling.VpcPollingActor.{LatestVpcs, Get
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
 import com.netflix.spinnaker.tide.actor.task.TaskDirector._
 import com.netflix.spinnaker.tide.actor.task.{TaskDirector, TaskActor, TaskProtocol}
+import com.netflix.spinnaker.tide.config.AwsConfig
 import com.netflix.spinnaker.tide.model.ResourceTracker.{SourceResource, TargetResource}
 import com.netflix.spinnaker.tide.model._
 import com.netflix.spinnaker.tide.model.AwsApi._
 import com.netflix.spinnaker.tide.transform.SecurityGroupConventions
 import scala.concurrent.duration.DurationInt
+import scala.collection.JavaConverters._
 
 class DependencyCopyActor() extends PersistentActor with ActorLogging {
 
@@ -246,9 +248,26 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   def constructIngressForNewSecurityGroup(groupName: String, securityGroupState: SecurityGroupState): Set[IpPermission] = {
     if (task.skipAllIngress || !task.requiredSecurityGroupNames.contains(groupName)) { return Set() }
     val spreadUserIdGroupPairs = AwsConversion.spreadUserIdGroupPairIngress(securityGroupState.ipPermissions)
+    val targetIsVpc = resourceTracker.vpcIds.target.isDefined
+    lazy val targetSecurityGroups = {
+      val ec2 = AwsConfig.awsServiceProviderFactory.getAwsServiceProvider(resourceTracker.target.location).get.getAmazonEC2
+      ec2.describeSecurityGroups().getSecurityGroups.asScala
+    }
     val filteredSecurityGroupIngress = spreadUserIdGroupPairs.filter { ipPermission =>
-      val account = ipPermission.userIdGroupPairs.head.account
-      account.id != "amazon-elb" && account.name.isDefined
+      val pair = ipPermission.userIdGroupPairs.head
+      if (pair.account.id == "amazon-elb") {
+        false
+      } else if (pair.account.name.isDefined) {
+        if (pair.groupName.isDefined && pair.groupName.get.startsWith("nf-")) {
+          targetSecurityGroups.exists { sg =>
+            sg.getGroupName == pair.groupName.get && (if (targetIsVpc) sg.getVpcId == resourceTracker.vpcIds.target.get else sg.getVpcId == null)
+          }
+        } else {
+          true
+        }
+      } else {
+        false
+      }
     }
     val securityGroupIngress = for (
       permission <- filteredSecurityGroupIngress;
