@@ -105,9 +105,16 @@ class SecurityGroupActor extends Actor with ActorLogging {
     }
   }
 
+  def namesAndPortsOnly(perms : Set[AwsApi.IpPermission]) : Set[AwsApi.IpPermission] = {
+    for {
+      perm <- perms
+      pair <- perm.userIdGroupPairs
+    } yield perm.copy(userIdGroupPairs = Set(pair.copy(groupId = None, vpcName = None)))
+  }
+
   def isDesiredStateRealized(upsertSecurityGroup: UpsertSecurityGroup, latest: SecurityGroupLatestState): Boolean = {
-    val upsertIngress = AwsConversion.spreadIngress(upsertSecurityGroup.state.ipPermissions)
-    val latestIngress = AwsConversion.spreadIngress(latest.state.ipPermissions)
+    val upsertIngress = namesAndPortsOnly(AwsConversion.spreadIngress(upsertSecurityGroup.state.ipPermissions))
+    val latestIngress = namesAndPortsOnly(AwsConversion.spreadIngress(latest.state.ipPermissions))
     upsertIngress.subsetOf(latestIngress)
   }
 }
