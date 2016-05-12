@@ -206,7 +206,7 @@ case class ClusterVpcMigrator(sourceVpcName: Option[String], targetVpcName: Stri
         .forVpc(sourceVpcName, Option(targetVpcName)).loadBalancerName)
       val newSecurityGroups = securityGroupIdMappingByLocation.get(location) match {
         case Some(securityGroupIdsSourceToTarget) =>
-          val targetIds = cluster.getSecurityGroupIds.map(securityGroupIdsSourceToTarget.getOrElse(_, "nonexistant"))
+          val targetIds = cluster.getSecurityGroupIds.map(securityGroupIdsSourceToTarget.getOrElse(_, "nonexistent"))
           securityGroupIdsSourceToTarget.get(cluster.getApplication) match {
             case None => targetIds
             case Some(id) => targetIds + id

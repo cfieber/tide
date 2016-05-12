@@ -36,31 +36,12 @@ case class SecurityGroupConventions(appName: String, accountName: String, vpcNam
     ))
   }
 
-  private def constructElbIngress: Set[IpPermission] = {
-    Set(
-      IpPermission(
-        fromPort = Some(80),
-        toPort = Some(80),
-        ipProtocol = "tcp",
-        ipRanges = Set("0.0.0.0/0"),
-        userIdGroupPairs = Set()
-      ),
-      IpPermission(
-        fromPort = Some(443),
-        toPort = Some(443),
-        ipProtocol = "tcp",
-        ipRanges = Set("0.0.0.0/0"),
-        userIdGroupPairs = Set()
-      )
-    )
-  }
-
   def appendBoilerplateIngress(groupName: String, allowIngressFromClassic: Boolean): Set[IpPermission] = {
     groupName match {
       case name if name == appName =>
         addClassicLinkPermission(constructAppIngress, allowIngressFromClassic)
       case name if name == SecurityGroupConventions.appSecurityGroupForElbName(appName) =>
-        addClassicLinkPermission(constructElbIngress, allowIngressFromClassic)
+        addClassicLinkPermission(Set(), allowIngressFromClassic)
       case _ =>
         Set()
     }
