@@ -19,6 +19,7 @@ import com.netflix.spinnaker.tide.model.AwsApi._
 import com.netflix.spinnaker.tide.transform.SecurityGroupConventions
 import scala.concurrent.duration.DurationInt
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 class DependencyCopyActor() extends PersistentActor with ActorLogging {
 
@@ -35,6 +36,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   var taskId: String = _
   var resourceTracker: ResourceTracker = _
   var complete = false
+  val elbExternalPorts: mutable.Set[Int] = mutable.Set()
 
   val clusterSharding = ClusterSharding.get(context.system)
 
@@ -142,6 +144,10 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
                   self ! RequiresSource(referencedSourceSecurityGroup, Some(resource.ref))
                 }
               }
+              elbExternalPorts ++= latestState.state.listenerDescriptions.map { it => it.listener.loadBalancerPort }
+              val elbSecurityGroup : String = SecurityGroupConventions.appSecurityGroupForElbName(task.appName.get)
+              self ! RequiresSource(resourceTracker.asSourceSecurityGroupReference(elbSecurityGroup), None)
+
               val targetResource = resourceTracker.transformToTarget(resource)
               val referencingSource = resourceTracker.lookupReferencingSourceByTarget(targetResource)
               sendTaskEvent(Mutation(taskId, Create(), CreateAwsResource(targetResource.ref, referencingSource)))
@@ -178,14 +184,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
 
   private def startResourceCopying(): Unit = {
     checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckCompletion())
-    val requiredSecurityGroupNames = (task.target.vpcName, task.appName) match {
-      case (Some(_), Some(appName)) =>
-        val appSecurityGroupNames = Seq(appName, SecurityGroupConventions.appSecurityGroupForElbName(appName))
-        task.requiredSecurityGroupNames ++ appSecurityGroupNames
-      case _ =>
-        task.requiredSecurityGroupNames
-    }
-    requiredSecurityGroupNames.foreach { it =>
+    task.requiredSecurityGroupNames.foreach { it =>
       self ! RequiresSource(resourceTracker.asSourceSecurityGroupReference(it), None)
     }
     task.sourceLoadBalancerNames.foreach { it =>
@@ -198,7 +197,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     latestStateOption match {
       case None =>
         if (task.dryRun) {
-          persist(TargetSecurityGroup(resource, "nonexistant"))(it => updateState(it))
+          persist(TargetSecurityGroup(resource, "nonexistent"))(it => updateState(it))
         }
       case Some(latestState) =>
         persist(TargetSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
@@ -213,7 +212,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     val groupName = resource.ref.identity.groupName
     val desiredState: SecurityGroupState = latestStateOption match {
       case None =>
-        persist(SourceSecurityGroup(resource, "nonexistant"))(it => updateState(it))
+        persist(SourceSecurityGroup(resource, "nonexistent"))(it => updateState(it))
         SecurityGroupState(groupName, Set())
       case Some(latestState) =>
         persist(SourceSecurityGroup(resource, latestState.securityGroupId))(it => updateState(it))
@@ -246,7 +245,11 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   }
 
   def constructIngressForNewSecurityGroup(groupName: String, securityGroupState: SecurityGroupState): Set[IpPermission] = {
-    if (task.skipAllIngress || !task.requiredSecurityGroupNames.contains(groupName)) { return Set() }
+    if (task.skipAllIngress ||
+      (groupName != SecurityGroupConventions.appSecurityGroupForElbName(task.appName.get)
+        && !task.requiredSecurityGroupNames.contains(groupName))) {
+      return Set()
+    }
     val spreadUserIdGroupPairs = AwsConversion.spreadUserIdGroupPairIngress(securityGroupState.ipPermissions)
     val targetIsVpc = resourceTracker.vpcIds.target.isDefined
     lazy val targetSecurityGroups = {
@@ -274,7 +277,10 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       userIdGroupPair <- permission.userIdGroupPairs
     ) yield permission.copy(userIdGroupPairs = Set(userIdGroupPair.copy(vpcName = task.target.vpcName)))
     val ipIngress = AwsConversion.spreadIpRangeIngress(securityGroupState.ipPermissions)
-    val newIngress = securityGroupIngress ++ ipIngress
+    var newIngress = securityGroupIngress ++ ipIngress
+    if (groupName == SecurityGroupConventions.appSecurityGroupForElbName(task.appName.get)) {
+      newIngress = newIngress ++ buildMappingsForElbPorts()
+    }
     task.appName match {
       case Some(appName) =>
         newIngress ++ SecurityGroupConventions(appName, task.target.location.account, task.target.vpcName).
@@ -282,6 +288,18 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
       case _ =>
         newIngress
     }
+  }
+
+  private def buildMappingsForElbPorts(): Set[IpPermission] = {
+    elbExternalPorts.map { it =>
+      IpPermission(
+        fromPort = Some(it),
+        toPort = Some(it),
+        ipProtocol = "tcp",
+        ipRanges = Set("0.0.0.0/0"),
+        userIdGroupPairs = Set()
+      )
+    }.toSet
   }
 
   private def requireIngressSecurityGroups(ingress: Set[IpPermission], referencedBy: AwsReference[SecurityGroupIdentity]): Unit = {
