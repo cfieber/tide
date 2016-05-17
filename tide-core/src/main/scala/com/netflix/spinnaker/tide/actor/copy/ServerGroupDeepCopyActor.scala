@@ -106,7 +106,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
         case Some(latestState) =>
           serverGroupState = latestState
           appName = Names.parseName(event.awsReference.identity.autoScalingGroupName).getApp
-          val requiredSecurityGroups = latestState.launchConfiguration.securityGroups + appName
+          val requiredSecurityGroups = latestState.launchConfiguration.securityGroups + appName - "nf-elb"
           val sourceLoadBalancerNames = latestState.autoScalingGroup.loadBalancerNames
           if (requiredSecurityGroups.isEmpty && sourceLoadBalancerNames.isEmpty) {
             self ! StartServerGroupCloning()
@@ -125,7 +125,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
         val sourceVpcName = serverGroupState.autoScalingGroup.vpcName
         val newAutoScalingGroup = serverGroupState.autoScalingGroup.forVpc(sourceVpcName, task.target.vpcName, task.targetSubnetType).withCapacity(0)
         val newLaunchConfiguration = serverGroupState.launchConfiguration.dropSecurityGroupNameLegacySuffixes.copy(
-          securityGroups = serverGroupState.launchConfiguration.securityGroups + appName)
+          securityGroups = serverGroupState.launchConfiguration.securityGroups + appName - "nf-elb")
         val cloneServerGroup = CloneServerGroup(newAutoScalingGroup, newLaunchConfiguration, startDisabled = true)
         if (task.dryRun) {
           val nextAsgIdentity = task.source.identity.nextGroup
