@@ -25,9 +25,9 @@ import scala.beans.BeanProperty
 
 object WebModel {
 
-  case class VpcDefinition(@BeanProperty account: String, @BeanProperty region: String, @BeanProperty vpcName: String) {
+  case class VpcDefinition(@BeanProperty account: String, @BeanProperty region: String, @BeanProperty vpcName: String, @BeanProperty keyName: String) {
     def toVpcLocation = {
-      VpcLocation(AwsLocation(account, region), Option(vpcName))
+      VpcLocation(AwsLocation(account, region), Option(vpcName), Option(keyName))
     }
   }
   case class DependencyCopyDefinition(@BeanProperty source: VpcDefinition,
