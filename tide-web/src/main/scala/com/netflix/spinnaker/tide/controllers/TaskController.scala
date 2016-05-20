@@ -19,7 +19,7 @@ import scala.concurrent.Await
 @RestController
 class TaskController @Autowired()(private val clusterSharding: ClusterSharding) {
 
-  implicit val timeout = Timeout(5 seconds)
+  implicit val timeout = Timeout(15 seconds)
 
   @RequestMapping(value = Array("/{id}"), method = Array(GET))
   def getTask(@PathVariable("id") id: String): TaskStatus = {
