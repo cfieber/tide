@@ -70,7 +70,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   override def receiveCommand: Receive = {
 
     case ContinueTask(ExecuteTask(_, task: DependencyCopyTask, _)) =>
-      checkForCreatedResources = scheduler.schedule(0 seconds, 15 seconds, self, CheckCompletion())
+      checkForCreatedResources = scheduler.schedule(0 seconds, 10 seconds, self, CheckCompletion())
 
     case event @ ExecuteTask(_, _: DependencyCopyTask, _) =>
       persist(event) { e =>
@@ -183,7 +183,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
   }
 
   private def startResourceCopying(): Unit = {
-    checkForCreatedResources = scheduler.schedule(15 seconds, 15 seconds, self, CheckCompletion())
+    checkForCreatedResources = scheduler.schedule(10 seconds, 10 seconds, self, CheckCompletion())
     task.requiredSecurityGroupNames.foreach { it =>
       self ! RequiresSource(resourceTracker.asSourceSecurityGroupReference(it), None)
     }

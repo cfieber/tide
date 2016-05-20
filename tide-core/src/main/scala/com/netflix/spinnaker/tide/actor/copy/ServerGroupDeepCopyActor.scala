@@ -124,9 +124,10 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
       if (cloneServerGroupTaskReference.isEmpty) {
         val sourceVpcName = serverGroupState.autoScalingGroup.vpcName
         val newAutoScalingGroup = serverGroupState.autoScalingGroup.forVpc(sourceVpcName, task.target.vpcName, task.targetSubnetType).withCapacity(0)
-        val newLaunchConfiguration = serverGroupState.launchConfiguration.dropSecurityGroupNameLegacySuffixes.copy(
-          securityGroups = serverGroupState.launchConfiguration.securityGroups + appName - "nf-elb")
-        val cloneServerGroup = CloneServerGroup(newAutoScalingGroup, newLaunchConfiguration, startDisabled = true)
+        val newLaunchConfiguration = serverGroupState.launchConfiguration.dropSecurityGroupNameLegacySuffixes
+          .copy(securityGroups = serverGroupState.launchConfiguration.securityGroups + appName - "nf-elb")
+          .copy(keyName = task.target.keyName.getOrElse(serverGroupState.launchConfiguration.keyName))
+        val cloneServerGroup = CloneServerGroup(newAutoScalingGroup, newLaunchConfiguration, startDisabled = true, target = task.target)
         if (task.dryRun) {
           val nextAsgIdentity = task.source.identity.nextGroup
           sendTaskEvent(Mutation(taskId, Create(),
@@ -140,13 +141,13 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
           persist(CloudDriverTaskReference(cloudDriverResponse.taskDetail.id)) { it =>
             updateState(it)
             cloneServerGroupTaskReference.foreach { taskReference =>
-              scheduler.scheduleOnce(15 seconds, cloudDriver, GetTaskDetail(taskReference.taskId))
+              scheduler.scheduleOnce(10 seconds, cloudDriver, GetTaskDetail(taskReference.taskId))
             }
           }
         }
       } else {
         cloneServerGroupTaskReference.foreach { taskReference =>
-          scheduler.scheduleOnce(15 seconds, cloudDriver, GetTaskDetail(taskReference.taskId))
+          scheduler.scheduleOnce(10 seconds, cloudDriver, GetTaskDetail(taskReference.taskId))
         }
       }
 
@@ -167,7 +168,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
             }
           } else {
             val cloudDriver = clusterSharding.shardRegion(CloudDriverActor.typeName)
-            scheduler.scheduleOnce(15 seconds, cloudDriver, GetTaskDetail(event.taskDetail.id))
+            scheduler.scheduleOnce(10 seconds, cloudDriver, GetTaskDetail(event.taskDetail.id))
           }
         }
       }

@@ -50,6 +50,7 @@ case class LoadBalancerDetails(awsReference: AwsReference[LoadBalancerIdentity],
 case class GetServerGroup() extends ServerGroupEvent
 case class CloneServerGroup(autoScalingGroup: AutoScalingGroupState, launchConfiguration: LaunchConfigurationState,
                             startDisabled: Boolean = false, application: Option[String] = None,
+                            target: VpcLocation,
                             stack: Option[String] = None, detail: Option[String] = None) extends ServerGroupEvent
 case class ServerGroupLatestState(autoScalingGroup: AutoScalingGroupState,
                                   launchConfiguration: LaunchConfigurationState) extends ServerGroupEvent

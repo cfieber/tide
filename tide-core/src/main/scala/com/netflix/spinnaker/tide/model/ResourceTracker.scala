@@ -49,7 +49,7 @@ case class ResourceTracker(source: VpcLocation, target: VpcLocation, vpcIds: Vpc
       case sourceIdentity: SecurityGroupIdentity =>
         sourceIdentity.dropLegacySuffix.copy(vpcId = vpcIds.target).asInstanceOf[T]
     }
-    TargetResource(AwsReference(source.location, targetIdentity))
+    TargetResource(AwsReference(target.location, targetIdentity))
   }
 
   def getSourceByTarget[T <: AwsIdentity](targetResource: TargetResource[T]): SourceResource[T] = {

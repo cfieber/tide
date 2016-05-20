@@ -130,18 +130,18 @@ object ConstructCloudDriverOperations {
       healthCheck.interval, healthCheck.timeout, healthCheck.unhealthyThreshold, healthCheck.healthyThreshold, listeners)
   }
 
-  def constructCloneServerGroupOperation(awsReference: AwsReference[ServerGroupIdentity],
+  def constructCloneServerGroupOperation(source: AwsReference[ServerGroupIdentity],
                                          cloneServerGroup: CloneServerGroup): CloneServerGroupOperation = {
-    val awsLocation = awsReference.location
+    val target = cloneServerGroup.target
     val autoScalingGroup = cloneServerGroup.autoScalingGroup
     val launchConfiguration = cloneServerGroup.launchConfiguration
 
     val availabilityZones: Map[String, Set[String]] = Map(
-      awsReference.location.region -> autoScalingGroup.availabilityZones
+      target.location.region -> autoScalingGroup.availabilityZones
     )
 
     val capacity = Capacity(autoScalingGroup.minSize, autoScalingGroup.maxSize, autoScalingGroup.desiredCapacity)
-    val names = Names.parseName(awsReference.identity.autoScalingGroupName)
+    val names = Names.parseName(source.identity.autoScalingGroupName)
 
     val application = cloneServerGroup.application.getOrElse(names.getApp)
     val stack = cloneServerGroup.stack.getOrElse(names.getStack)
@@ -149,13 +149,13 @@ object ConstructCloudDriverOperations {
 
     CloneServerGroupOperation(application, stack, detail,
       autoScalingGroup.subnetType, autoScalingGroup.vpcName, availabilityZones,
-      awsLocation.account, launchConfiguration.securityGroups, autoScalingGroup.loadBalancerNames, capacity,
+      target.location.account, launchConfiguration.securityGroups, autoScalingGroup.loadBalancerNames, capacity,
       launchConfiguration.iamInstanceProfile, launchConfiguration.keyName, launchConfiguration.imageId,
       launchConfiguration.instanceType, launchConfiguration.associatePublicIpAddress, launchConfiguration.ramdiskId,
       autoScalingGroup.terminationPolicies, autoScalingGroup.suspendedProcesses,
       launchConfiguration.spotPrice, autoScalingGroup.healthCheckType, autoScalingGroup.healthCheckGracePeriod,
       autoScalingGroup.defaultCooldown, launchConfiguration.isInstanceMonitoringEnabled,
-      launchConfiguration.ebsOptimized, cloneServerGroup.startDisabled, Source.from(awsReference))
+      launchConfiguration.ebsOptimized, cloneServerGroup.startDisabled, Source.from(source))
   }
 
   def constructAttachClassicLinkVpcOperation(awsReference: AwsReference[InstanceIdentity],
