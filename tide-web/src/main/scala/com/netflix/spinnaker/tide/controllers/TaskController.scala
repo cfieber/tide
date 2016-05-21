@@ -22,15 +22,12 @@ import scala.concurrent.Await
 class TaskController @Autowired()(private val clusterSharding: ClusterSharding) {
 
   implicit val timeout = Timeout(5 seconds)
+  implicit val maxRetryCount = 3
+
 
   @RequestMapping(value = Array("/{id}"), method = Array(GET))
-  def getTask(@PathVariable("id") id: String, shouldRetry: Boolean = true): TaskStatus = {
-    val future = (clusterSharding.shardRegion(TaskActor.typeName) ? GetTask(id)).mapTo[TaskStatus]
-    try {
-      Await.result(future, timeout.duration)
-    } catch {
-      case te: TimeoutException => getTask(id, shouldRetry = false)
-    }
+  def getTask(@PathVariable("id") id: String): TaskStatus = {
+    retrieveTask(id, 0)
   }
 
   @RequestMapping(value = Array("/restart/{id}"), method = Array(GET))
@@ -51,6 +48,22 @@ class TaskController @Autowired()(private val clusterSharding: ClusterSharding) 
     tasks.sortBy(_.taskId).map { task =>
       task.taskId -> task.description.summary
     }.toMap
+  }
+
+  def retrieveTask(id: String, retriesAttempted: Int): TaskStatus = {
+    val future = (clusterSharding.shardRegion(TaskActor.typeName) ? GetTask(id)).mapTo[TaskStatus]
+    // For some reason, this call intermittently throws TimeoutExceptions. We retry, since Orca reads it as a failure,
+    // and reports to the UI that the task failed, even though it's probably continuing to create artifacts, which is
+    // a very bad thing
+    try {
+      Await.result(future, timeout.duration)
+    } catch {
+      case te: TimeoutException =>
+        if (retriesAttempted >= maxRetryCount) {
+          throw te
+        }
+        retrieveTask(id, retriesAttempted + 1)
+    }
   }
 
 }
