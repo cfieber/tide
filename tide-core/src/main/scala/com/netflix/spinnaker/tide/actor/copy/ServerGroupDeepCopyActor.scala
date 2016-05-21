@@ -141,13 +141,13 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
           persist(CloudDriverTaskReference(cloudDriverResponse.taskDetail.id)) { it =>
             updateState(it)
             cloneServerGroupTaskReference.foreach { taskReference =>
-              scheduler.scheduleOnce(10 seconds, cloudDriver, GetTaskDetail(taskReference.taskId))
+              scheduler.scheduleOnce(15 seconds, cloudDriver, GetTaskDetail(taskReference.taskId))
             }
           }
         }
       } else {
         cloneServerGroupTaskReference.foreach { taskReference =>
-          scheduler.scheduleOnce(10 seconds, cloudDriver, GetTaskDetail(taskReference.taskId))
+          scheduler.scheduleOnce(15 seconds, cloudDriver, GetTaskDetail(taskReference.taskId))
         }
       }
 
@@ -168,7 +168,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
             }
           } else {
             val cloudDriver = clusterSharding.shardRegion(CloudDriverActor.typeName)
-            scheduler.scheduleOnce(10 seconds, cloudDriver, GetTaskDetail(event.taskDetail.id))
+            scheduler.scheduleOnce(15 seconds, cloudDriver, GetTaskDetail(event.taskDetail.id))
           }
         }
       }
