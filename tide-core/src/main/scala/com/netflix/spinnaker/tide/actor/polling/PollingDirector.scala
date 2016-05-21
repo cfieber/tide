@@ -17,7 +17,7 @@ class PollingDirector extends Actor {
   var pollInit: Option[PollInit] = None
 
   private implicit val dispatcher = context.dispatcher
-  val tick = context.system.scheduler.schedule(0 seconds, 10 seconds, self, Poll())
+  val tick = context.system.scheduler.schedule(0 seconds, 15 seconds, self, Poll())
 
   override def postStop() = {
     tick.cancel()
