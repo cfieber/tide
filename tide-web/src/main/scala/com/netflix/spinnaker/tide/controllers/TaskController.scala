@@ -1,15 +1,17 @@
 package com.netflix.spinnaker.tide.controllers
 
+import java.util.concurrent.TimeoutException
 import javax.servlet.http.HttpServletRequest
 
 import akka.contrib.pattern.ClusterSharding
 import akka.util.Timeout
-import com.netflix.spinnaker.tide.actor.task.{TaskDirector, TaskActor}
+import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector}
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
 import TaskDirector.GetRunningTasks
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RequestMethod._
 import org.springframework.web.bind.annotation._
+
 import scala.concurrent.duration.DurationInt
 import akka.pattern.ask
 
@@ -22,9 +24,13 @@ class TaskController @Autowired()(private val clusterSharding: ClusterSharding) 
   implicit val timeout = Timeout(5 seconds)
 
   @RequestMapping(value = Array("/{id}"), method = Array(GET))
-  def getTask(@PathVariable("id") id: String): TaskStatus = {
+  def getTask(@PathVariable("id") id: String, shouldRetry: Boolean = true): TaskStatus = {
     val future = (clusterSharding.shardRegion(TaskActor.typeName) ? GetTask(id)).mapTo[TaskStatus]
-    Await.result(future, timeout.duration)
+    try {
+      Await.result(future, timeout.duration)
+    } catch {
+      case te: TimeoutException => getTask(id, shouldRetry = false)
+    }
   }
 
   @RequestMapping(value = Array("/restart/{id}"), method = Array(GET))
