@@ -76,6 +76,17 @@ object Front50Service {
     def getAccount = {
       attributes("account").asInstanceOf[String]
     }
+    def setAccount(account: String): Cluster = {
+      Cluster(attributes + ("account" -> account))
+    }
+
+    def getKeyName = {
+      attributes("keyPair").asInstanceOf[String]
+    }
+    def setKeyName(keyName: String): Cluster = {
+      Cluster(attributes + ("keyPair" -> keyName))
+    }
+
     def getRegion = {
       val availabilityZones = attributes("availabilityZones").asInstanceOf[Map[String, String]]
       availabilityZones.keySet.head
