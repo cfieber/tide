@@ -126,8 +126,9 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
             vpcName == task.sourceVpcName
           }
           val dependencyCopyTasks: Seq[DependencyCopyTask] = clusterDependenciesForSourceVpc.map { dependencies =>
+            val targetAccount = task.accountMapping.getOrElse(dependencies.account, AccountKeyMapping(dependencies.account, "nonexistent"))
             val sourceVpcLocation = VpcLocation(AwsLocation(dependencies.account, dependencies.region), task.sourceVpcName)
-            val targetVpcLocation = VpcLocation(AwsLocation(dependencies.account, dependencies.region), Option(task.targetVpcName))
+            val targetVpcLocation = VpcLocation(AwsLocation(targetAccount.account, dependencies.region), Option(task.targetVpcName), Option(targetAccount.keyName))
             val securityGroupIdToName = getSecurityGroupInToNameMapping(dependencies.account, dependencies.region)
             val securityGroupNames = dependencies.securityGroupIds.map(securityGroupIdToName(_).groupName)
             DependencyCopyTask(sourceVpcLocation, targetVpcLocation, securityGroupNames,
@@ -139,7 +140,7 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
 
     case event: StartPipelineCloning =>
       val pipelineWithDisabledTriggers = pipelineState.disableTriggers()
-      val migrator = ClusterVpcMigrator(task.sourceVpcName, task.targetVpcName, task.targetSubnetType, event.securityGroupIdMappingByLocation)
+      val migrator = ClusterVpcMigrator(task.sourceVpcName, task.targetVpcName, task.targetSubnetType, task.accountMapping, event.securityGroupIdMappingByLocation)
       val migratedPipeline = pipelineWithDisabledTriggers.applyVisitor(migrator)
       val newPipeline = migratedPipeline.copy(name = s"${migratedPipeline.name} - ${task.targetVpcName}")
       sendTaskEvent(Mutation(taskId, Create(), CreatePipeline(newPipeline)))
@@ -184,6 +185,7 @@ object PipelineDeepCopyActor extends ClusteredActorObject with TaskActorObject {
                                   targetVpcName: String,
                                   allowIngressFromClassic: Boolean = true,
                                   targetSubnetType: Option[String],
+                                  accountMapping: Map[String, AccountKeyMapping],
                                   dryRun: Boolean = false)
     extends TaskDescription with PipelineDeepCopyProtocol {
     val taskType: String = "PipelineDeepCopyTask"
@@ -195,6 +197,7 @@ object PipelineDeepCopyActor extends ClusteredActorObject with TaskActorObject {
 }
 
 case class ClusterVpcMigrator(sourceVpcName: Option[String], targetVpcName: String, targetSubnetType: Option[String],
+                              accountKeyMapping: Map[String, AccountKeyMapping],
                               securityGroupIdMappingByLocation: Map[AwsLocation, Map[String, String]]) extends ClusterVisitor {
   def visit(cluster: Cluster): Cluster = {
     val location = AwsLocation(cluster.getAccount, cluster.getRegion)
@@ -214,7 +217,11 @@ case class ClusterVpcMigrator(sourceVpcName: Option[String], targetVpcName: Stri
         case None =>
           cluster.getSecurityGroupIds
       }
-      cluster.setSubnetType (newSubnetType).setLoadBalancersNames(newLoadBalancers)
+      val mapping: AccountKeyMapping = accountKeyMapping.getOrElse(cluster.getAccount, AccountKeyMapping(cluster.getAccount, cluster.getKeyName))
+      cluster.setSubnetType(newSubnetType)
+        .setAccount(mapping.account)
+        .setKeyName(mapping.keyName)
+        .setLoadBalancersNames(newLoadBalancers)
         .setSecurityGroupIds(newSecurityGroups)
     } else {
       cluster

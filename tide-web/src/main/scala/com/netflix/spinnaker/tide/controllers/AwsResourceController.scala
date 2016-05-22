@@ -172,7 +172,8 @@ class AwsResourceController @Autowired()(private val clusterSharding: ClusterSha
                        @RequestBody pipelineVpcMigrateDefinition: PipelineVpcMigrateDefinition) = {
     val taskDescription = PipelineDeepCopyTask(id, pipelineVpcMigrateDefinition.sourceVpcName,
       pipelineVpcMigrateDefinition.targetVpcName,
-      allowIngressFromClassic = allowIngressFromClassic, dryRun = dryRun, targetSubnetType = Option(subnetType))
+      allowIngressFromClassic = allowIngressFromClassic, dryRun = dryRun, targetSubnetType = Option(subnetType),
+      accountMapping = pipelineVpcMigrateDefinition.toAccountKeyMapping)
     val future = (taskDirector ? taskDescription).mapTo[ExecuteTask]
     val task = Await.result(future, timeout.duration)
     task.taskId

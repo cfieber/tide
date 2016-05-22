@@ -64,6 +64,8 @@ object AwsApi {
 
   case class VpcLocation(@JsonUnwrapped location: AwsLocation, vpcName: Option[String], keyName: Option[String] = Option.empty)
 
+  case class AccountKeyMapping(account: String, keyName: String)
+
   trait AwsIdentity extends AkkaClustered
 
   case class AwsReference[T <: AwsIdentity](location: AwsLocation, identity: T) extends AkkaClustered {

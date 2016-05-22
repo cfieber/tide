@@ -19,7 +19,7 @@ package com.netflix.spinnaker.tide
 
 import com.netflix.spinnaker.tide.actor.copy.DependencyCopyActor
 import com.netflix.spinnaker.tide.model.AwsApi
-import AwsApi.{VpcLocation, AwsLocation}
+import AwsApi.{AccountKeyMapping, AwsLocation, VpcLocation}
 import DependencyCopyActor.DependencyCopyTask
 import scala.beans.BeanProperty
 
@@ -39,6 +39,17 @@ object WebModel {
     }
   }
 
-  case class PipelineVpcMigrateDefinition(@BeanProperty sourceVpcName: Option[String], @BeanProperty targetVpcName: String)
+  case class PipelineVpcMigrateDefinition(@BeanProperty sourceVpcName: Option[String],
+                                          @BeanProperty targetVpcName: String,
+                                          @BeanProperty accountMapping: Set[PipelineVpcAccountMapping]) {
+    def toAccountKeyMapping = {
+      accountMapping.map(mapping => mapping.source -> AccountKeyMapping(mapping.target, mapping.keyName))
+        .toMap
+    }
+  }
+
+  case class PipelineVpcAccountMapping(@BeanProperty source: String,
+                                       @BeanProperty target: String,
+                                       @BeanProperty keyName: String)
 
 }
