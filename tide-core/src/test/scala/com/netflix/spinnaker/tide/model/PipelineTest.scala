@@ -111,7 +111,7 @@ class PipelineTest extends FlatSpec with GivenWhenThen with DiagrammedAssertions
     val pipeline = singleDeploymentPipeline
 
     When("vpc migrate visitor is applied")
-    val migrator = ClusterVpcMigrator(Option("Main"), "vpc0", Option.empty, Map(AwsLocation("prod", "us-west-1") ->
+    val migrator = ClusterVpcMigrator(Option("Main"), "vpc0", Option.empty, Map.empty, Map(AwsLocation("prod", "us-west-1") ->
       Map("sg-1234" -> "sg-5678", "sg-abcd" -> "sg-efgh")))
     val migratedPipeline = pipeline.applyVisitor(migrator)
 
@@ -182,7 +182,7 @@ class PipelineTest extends FlatSpec with GivenWhenThen with DiagrammedAssertions
     val pipeline = singleDeploymentPipeline
 
     When("vpc migrate visitor is applied")
-    val migrator = ClusterVpcMigrator(Option("Main"), "vpc0", None, Map(AwsLocation("prod", "us-west-1") ->
+    val migrator = ClusterVpcMigrator(Option("Main"), "vpc0", None, Map.empty, Map(AwsLocation("prod", "us-west-1") ->
       Map("sg-1234" -> "sg-5678", "sg-abcd" -> "sg-efgh")))
     val migratedPipeline = pipeline.applyVisitor(migrator)
 
@@ -196,7 +196,7 @@ class PipelineTest extends FlatSpec with GivenWhenThen with DiagrammedAssertions
     val pipeline = singleDeploymentPipeline
 
     When("vpc migrate visitor is applied")
-    val migrator = ClusterVpcMigrator(Option("Main"), "vpc0", Some("external"), Map(AwsLocation("prod", "us-west-1") ->
+    val migrator = ClusterVpcMigrator(Option("Main"), "vpc0", Some("external"), Map.empty, Map(AwsLocation("prod", "us-west-1") ->
       Map("sg-1234" -> "sg-5678", "sg-abcd" -> "sg-efgh")))
     val migratedPipeline = pipeline.applyVisitor(migrator)
 
