@@ -43,7 +43,7 @@ object WebModel {
                                           @BeanProperty targetVpcName: String,
                                           @BeanProperty accountMapping: Set[PipelineVpcAccountMapping]) {
     def toAccountKeyMapping = {
-      accountMapping.map(mapping => mapping.source -> AccountKeyMapping(mapping.target, mapping.keyName))
+      Option(accountMapping).getOrElse(Set.empty).map(mapping => mapping.source -> AccountKeyMapping(mapping.target, mapping.keyName))
         .toMap
     }
   }
