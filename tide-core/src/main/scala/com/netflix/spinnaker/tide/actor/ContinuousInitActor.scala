@@ -10,12 +10,14 @@ import com.netflix.spinnaker.tide.actor.polling.PollingDirector
 import com.netflix.spinnaker.tide.actor.polling.PollingDirector.PollInit
 import com.netflix.spinnaker.tide.actor.task.TaskDirector
 import com.netflix.spinnaker.tide.actor.task.TaskDirector.GetRunningTasks
+import com.netflix.spinnaker.tide.config.ClassicLinkSettings
+
 import scala.concurrent.duration.DurationInt
 import scala.collection.JavaConverters._
 
 class ContinuousInitActor(clusterSharding: ClusterSharding,
                           accountCredentialsRepository: AccountCredentialsRepository,
-                          classicLinkSecurityGroupNames: Seq[String]) extends Actor with ActorLogging {
+                          classicLinkSettings: ClassicLinkSettings) extends Actor with ActorLogging {
 
   private implicit val dispatcher = context.dispatcher
   val tick = context.system.scheduler.schedule(0 seconds, 5 seconds, self, Tick())
@@ -41,7 +43,7 @@ class ContinuousInitActor(clusterSharding: ClusterSharding,
         credential.getAccountId -> credential.getName
       }.toMap
       clusterSharding.shardRegion(PollingDirector.typeName) ! PollInit(accountNamesToRegionNames,
-        classicLinkSecurityGroupNames, AccountMetaData(accountIdsToNames))
+        classicLinkSettings, AccountMetaData(accountIdsToNames))
       clusterSharding.shardRegion(TaskDirector.typeName) ! GetRunningTasks()
     case _ =>
   }
