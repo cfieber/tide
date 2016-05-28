@@ -26,12 +26,10 @@ import com.netflix.spinnaker.tide.actor.aws._
 import com.netflix.spinnaker.tide.actor.classiclink.{AttachClassicLinkActor, ClassicLinkInstancesActor}
 import com.netflix.spinnaker.tide.actor.comparison.AttributeDiffActor
 import com.netflix.spinnaker.tide.actor.copy.{ServerGroupDeepCopyActor, PipelineDeepCopyActor, DependencyCopyActor}
-import com.netflix.spinnaker.tide.actor.polling.PollingDirector.PollInit
 import com.netflix.spinnaker.tide.actor.polling._
 import com.netflix.spinnaker.tide.actor.service.{Front50Actor, CloudDriverActor}
 import com.netflix.spinnaker.tide.actor.service.CloudDriverActor.CloudDriverInit
 import com.netflix.spinnaker.tide.actor.service.Front50Actor.Front50Init
-import com.netflix.spinnaker.tide.actor.task.TaskDirector.GetRunningTasks
 import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector}
 import com.netflix.spinnaker.tide.actor.{ContinuousInitActor, ClusterTestActor}
 import org.springframework.beans.factory.annotation.{Value, Autowired}
@@ -94,8 +92,7 @@ class AkkaClusterConfiguration {
   def initActors() = {
     clusterSharding.shardRegion(CloudDriverActor.typeName) ! CloudDriverInit(cloudDriverApiUrl)
     clusterSharding.shardRegion(Front50Actor.typeName) ! Front50Init(front50ApiUrl)
-    val classicLinkSecurityGroupNames: Seq[String] = classicLinkSettings.getSecurityGroups.asScala
-    val props = Props(classOf[ContinuousInitActor], clusterSharding, accountCredentialsRepository, classicLinkSecurityGroupNames)
+    val props = Props(classOf[ContinuousInitActor], clusterSharding, accountCredentialsRepository, classicLinkSettings)
     system.actorOf(props, "ContinuousInit")
   }
 
@@ -114,6 +111,7 @@ class AkkaClusterConfiguration {
 
 class ClassicLinkSettings {
   @BeanProperty var securityGroups: java.util.List[String] = _
+  @BeanProperty var accounts: java.util.List[String] = _
 }
 
 object OkHttpClientConfigurationHolder {
