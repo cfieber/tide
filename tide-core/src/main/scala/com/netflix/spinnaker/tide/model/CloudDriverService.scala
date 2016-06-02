@@ -172,6 +172,10 @@ object CloudDriverService {
     val operationTypeName = "copyLastAsgDescription"
   }
 
+  case class AllowLaunchOperation(account: String, amiName: String, region: String, credentials: String = "test") extends CloudDriverOperation {
+    val operationTypeName = "allowLaunchDescription"
+  }
+
   case class Capacity(min: Int, max: Int, desired: Int)
 
   case class Source(account: String, region: String, asgName: String)

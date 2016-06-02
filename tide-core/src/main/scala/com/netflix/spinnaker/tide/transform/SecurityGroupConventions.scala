@@ -4,6 +4,10 @@ import com.netflix.spinnaker.tide.model.AwsApi.{AccountIdentifier, UserIdGroupPa
 
 case class SecurityGroupConventions(appName: String, accountName: String, vpcName: Option[String]) {
 
+  private val accountsToClassicLink: Map[String, String] = Map(
+    "persistence_test" -> "nf-classiclink-rds"
+  )
+
   private def constructClassicLinkIpPermission: IpPermission = {
     IpPermission (
       fromPort = Some(80),
@@ -12,7 +16,7 @@ case class SecurityGroupConventions(appName: String, accountName: String, vpcNam
       ipRanges = Set(),
       userIdGroupPairs = Set(UserIdGroupPairs(
         groupId = None,
-        groupName = Some("nf-classiclink"),
+        groupName = Some(accountsToClassicLink.getOrElse(accountName, "nf-classiclink")),
         AccountIdentifier("", Some(accountName)),
         vpcName
       ))

@@ -317,7 +317,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
         case Some(ingressAccountName) =>
           val dependencyCopyTask = DependencyCopyTask(
             VpcLocation(task.source.location.copy(account = ingressAccountName), task.source.vpcName),
-            VpcLocation(task.target.location.copy(account = ingressAccountName), task.target.vpcName),
+            VpcLocation(task.target.location.copy(account = targetAccount), task.target.vpcName),
             Set(ingressGroupName),
             Set(), None, allowIngressFromClassic = task.allowIngressFromClassic, dryRun = task.dryRun,
             skipAllIngress = true)

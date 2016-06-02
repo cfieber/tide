@@ -48,7 +48,15 @@ class CloudDriverActor extends RetrofitServiceActor[CloudDriverService] with Act
     case AwsResourceProtocol(awsReference, event: CloneServerGroup) =>
       val ref = awsReference.asInstanceOf[AwsReference[ServerGroupIdentity]]
       val op = ConstructCloudDriverOperations.constructCloneServerGroupOperation(ref, event)
-      val taskResult = service.submitTask(op.content())
+      var task = op.content()
+      if (event.target.location.account != "test") {
+        val launchOperation = AllowLaunchOperation(event.target.location.account, event.launchConfiguration.imageId, event.target.location.region)
+        task = List(
+          Map(launchOperation.operationTypeName -> launchOperation),
+          Map(op.operationTypeName -> op)
+        )
+      }
+      val taskResult = service.submitTask(task)
       sender() ! CloudDriverResponse(service.getTaskDetail(taskResult.id))
 
     case AwsResourceProtocol(awsReference, event: AttachClassicLinkVpc) =>
