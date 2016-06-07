@@ -284,7 +284,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
     task.appName match {
       case Some(appName) =>
         newIngress ++ SecurityGroupConventions(appName, task.target.location.account, task.target.vpcName).
-          appendBoilerplateIngress(groupName, task.allowIngressFromClassic)
+          appendBoilerplateIngress(groupName, task.allowIngressFromClassic, task.sourceLoadBalancerNames.nonEmpty)
       case _ =>
         newIngress
     }

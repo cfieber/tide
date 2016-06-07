@@ -23,12 +23,9 @@ case class SecurityGroupConventions(appName: String, accountName: String, vpcNam
     )
   }
 
-  private def constructAppIngress: Set[IpPermission] = {
-    Set(IpPermission (
-      fromPort = Some(7001),
-      toPort = Some(7002),
-      ipProtocol = "tcp",
-      ipRanges = Set(),
+  private def constructAppIngress(includeElbSecurityGroup: Boolean): Set[IpPermission] = {
+    var userIdGroupPairs: Set[UserIdGroupPairs] = Set()
+    if (includeElbSecurityGroup) {
       userIdGroupPairs = Set (
         UserIdGroupPairs (
           groupId = None,
@@ -37,13 +34,20 @@ case class SecurityGroupConventions(appName: String, accountName: String, vpcNam
           vpcName
         )
       )
+    }
+    Set(IpPermission (
+      fromPort = Some(7001),
+      toPort = Some(7002),
+      ipProtocol = "tcp",
+      ipRanges = Set(),
+      userIdGroupPairs = userIdGroupPairs
     ))
   }
 
-  def appendBoilerplateIngress(groupName: String, allowIngressFromClassic: Boolean): Set[IpPermission] = {
+  def appendBoilerplateIngress(groupName: String, allowIngressFromClassic: Boolean, includeElbSecurityGroup: Boolean): Set[IpPermission] = {
     groupName match {
       case name if name == appName =>
-        addClassicLinkPermission(constructAppIngress, allowIngressFromClassic)
+        addClassicLinkPermission(constructAppIngress(includeElbSecurityGroup), allowIngressFromClassic)
       case name if name == SecurityGroupConventions.appSecurityGroupForElbName(appName) =>
         addClassicLinkPermission(Set(), allowIngressFromClassic)
       case _ =>
