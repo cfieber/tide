@@ -4,18 +4,17 @@ import java.util.concurrent.TimeoutException
 import javax.servlet.http.HttpServletRequest
 
 import akka.contrib.pattern.ClusterSharding
+import akka.pattern.ask
 import akka.util.Timeout
-import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector}
 import com.netflix.spinnaker.tide.actor.task.TaskActor._
-import TaskDirector.GetRunningTasks
+import com.netflix.spinnaker.tide.actor.task.TaskDirector.GetRunningTasks
+import com.netflix.spinnaker.tide.actor.task.{TaskActor, TaskDirector}
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.RequestMethod._
 import org.springframework.web.bind.annotation._
 
-import scala.concurrent.duration.DurationInt
-import akka.pattern.ask
-
 import scala.concurrent.Await
+import scala.concurrent.duration.DurationInt
 
 @RequestMapping(value = Array("/task"))
 @RestController
@@ -32,8 +31,8 @@ class TaskController @Autowired()(private val clusterSharding: ClusterSharding) 
 
   @RequestMapping(value = Array("/restart/{id}"), method = Array(GET))
   def restartTask(@PathVariable("id") id: String): String = {
-    val future = (clusterSharding.shardRegion(TaskActor.typeName) ? RestartTask(id)).mapTo[String]
-    Await.result(future, timeout.duration)
+    val future = (clusterSharding.shardRegion(TaskActor.typeName) ? RestartTask(id)).mapTo[ExecuteTask]
+    Await.result(future, timeout.duration).taskId
   }
 
   @RequestMapping(value = Array("/cancel/{id}"), method = Array(GET))
