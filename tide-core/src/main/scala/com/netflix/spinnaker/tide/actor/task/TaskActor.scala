@@ -170,6 +170,10 @@ object TaskActor extends TaskActorObject {
     val name: String = "create"
   }
 
+  case class Skip() extends MutationType {
+    val name: String = "skip"
+  }
+
   trait MutationDetails
 
   case class GetTask(taskId: String) extends TaskProtocol
