@@ -75,7 +75,7 @@ object AwsApi {
   case class CreateAwsResource(awsReference: AwsReference[_ <: AwsIdentity],
                                referencedBy: Option[AwsReference[_]], objectToCreate: Option[Any]= None) extends MutationDetails
 
-  case class SkippedIngressRule(group: UserIdGroupPairs, source: String) extends MutationDetails
+  case class SkippedIngressRule(awsReference: UserIdGroupPairs, source: String) extends MutationDetails
 
   case class SecurityGroup(groupId: String,
                            @JsonUnwrapped @JsonProperty("name") identity: SecurityGroupIdentity,
