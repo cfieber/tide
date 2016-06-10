@@ -269,6 +269,7 @@ class DependencyCopyActor() extends PersistentActor with ActorLogging {
           true
         }
       } else {
+        sendTaskEvent(Mutation(taskId, Skip(), SkippedIngressRule(pair, groupName)))
         false
       }
     }
