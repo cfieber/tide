@@ -8,7 +8,7 @@ import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.{PersistentActor, RecoveryCompleted, RecoveryFailure}
 import akka.util.Timeout
 import com.netflix.spinnaker.tide.actor.TaskActorObject
-import com.netflix.spinnaker.tide.actor.task.TaskActor._
+import com.netflix.spinnaker.tide.actor.task.TaskActor.{CancelTask, RestartTask, TaskCancel, Log, Mutation, GetTask, TaskStatus, ExecuteChildTasks, ExecuteTask, ContinueTask, TaskComplete, ChildTaskComplete, ChildTaskGroupComplete}
 import com.netflix.spinnaker.tide.actor.task.TaskDirector.TaskDescription
 
 import scala.concurrent.duration.DurationInt
