@@ -17,7 +17,6 @@
 package com.netflix.spinnaker.tide.model
 
 import com.fasterxml.jackson.annotation.{JsonProperty, JsonIgnore, JsonUnwrapped}
-import com.fasterxml.jackson.databind.ObjectMapper
 import com.netflix.frigga.autoscaling.AutoScalingGroupNameBuilder
 import com.netflix.spinnaker.tide.actor.task.TaskActor.MutationDetails
 
@@ -75,7 +74,7 @@ object AwsApi {
   case class CreateAwsResource(awsReference: AwsReference[_ <: AwsIdentity],
                                referencedBy: Option[AwsReference[_]], objectToCreate: Option[Any]= None) extends MutationDetails
 
-  case class SkippedIngressRule(awsReference: UserIdGroupPairs, source: String) extends MutationDetails
+  case class SkippedIngressRule(awsReference: UserIdGroupPairs, referencedBy: Map[String, String]) extends MutationDetails
 
   case class SecurityGroup(groupId: String,
                            @JsonUnwrapped @JsonProperty("name") identity: SecurityGroupIdentity,
