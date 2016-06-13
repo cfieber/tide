@@ -87,6 +87,14 @@ object Front50Service {
       Cluster(attributes + ("keyPair" -> keyName))
     }
 
+    def getIamRole = {
+      attributes("iamRole").asInstanceOf[String]
+    }
+
+    def setIamRole(iamRole: Option[String]): Cluster = {
+      Cluster(attributes + ("iamRole" -> iamRole.getOrElse(getIamRole)))
+    }
+
     def getRegion = {
       val availabilityZones = attributes("availabilityZones").asInstanceOf[Map[String, String]]
       availabilityZones.keySet.head

@@ -25,9 +25,13 @@ import scala.beans.BeanProperty
 
 object WebModel {
 
-  case class VpcDefinition(@BeanProperty account: String, @BeanProperty region: String, @BeanProperty vpcName: String, @BeanProperty keyName: String) {
+  case class VpcDefinition(@BeanProperty account: String,
+                           @BeanProperty region: String,
+                           @BeanProperty vpcName: String,
+                           @BeanProperty keyName: String,
+                           @BeanProperty iamRole: String) {
     def toVpcLocation = {
-      VpcLocation(AwsLocation(account, region), Option(vpcName), Option(keyName))
+      VpcLocation(AwsLocation(account, region), Option(vpcName), Option(keyName), Option(iamRole))
     }
   }
   case class DependencyCopyDefinition(@BeanProperty source: VpcDefinition,
@@ -43,13 +47,14 @@ object WebModel {
                                           @BeanProperty targetVpcName: String,
                                           @BeanProperty accountMapping: Set[PipelineVpcAccountMapping]) {
     def toAccountKeyMapping = {
-      Option(accountMapping).getOrElse(Set.empty).map(mapping => mapping.source -> AccountKeyMapping(mapping.target, mapping.keyName))
+      Option(accountMapping).getOrElse(Set.empty).map(mapping => mapping.source -> AccountKeyMapping(mapping.target, mapping.keyName, mapping.iamRole))
         .toMap
     }
   }
 
   case class PipelineVpcAccountMapping(@BeanProperty source: String,
                                        @BeanProperty target: String,
-                                       @BeanProperty keyName: String)
+                                       @BeanProperty keyName: String,
+                                       @BeanProperty iamRole: Option[String] )
 
 }

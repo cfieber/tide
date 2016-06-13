@@ -126,7 +126,7 @@ class PipelineDeepCopyActor extends PersistentActor with ActorLogging {
             vpcName == task.sourceVpcName
           }
           val dependencyCopyTasks: Seq[DependencyCopyTask] = clusterDependenciesForSourceVpc.map { dependencies =>
-            val targetAccount = task.accountMapping.getOrElse(dependencies.account, AccountKeyMapping(dependencies.account, "nonexistent"))
+            val targetAccount = task.accountMapping.getOrElse(dependencies.account, AccountKeyMapping(dependencies.account, "nonexistent", Option.empty))
             val sourceVpcLocation = VpcLocation(AwsLocation(dependencies.account, dependencies.region), task.sourceVpcName)
             val targetVpcLocation = VpcLocation(AwsLocation(targetAccount.account, dependencies.region), Option(task.targetVpcName), Option(targetAccount.keyName))
             val securityGroupIdToName = getSecurityGroupInToNameMapping(dependencies.account, dependencies.region)
@@ -217,10 +217,11 @@ case class ClusterVpcMigrator(sourceVpcName: Option[String], targetVpcName: Stri
         case None =>
           cluster.getSecurityGroupIds
       }
-      val mapping: AccountKeyMapping = accountKeyMapping.getOrElse(cluster.getAccount, AccountKeyMapping(cluster.getAccount, cluster.getKeyName))
+      val mapping: AccountKeyMapping = accountKeyMapping.getOrElse(cluster.getAccount, AccountKeyMapping(cluster.getAccount, cluster.getKeyName, Option(cluster.getIamRole)))
       cluster.setSubnetType(newSubnetType)
         .setAccount(mapping.account)
         .setKeyName(mapping.keyName)
+        .setIamRole(mapping.iamRole)
         .setLoadBalancersNames(newLoadBalancers)
         .setSecurityGroupIds(newSecurityGroups)
     } else {

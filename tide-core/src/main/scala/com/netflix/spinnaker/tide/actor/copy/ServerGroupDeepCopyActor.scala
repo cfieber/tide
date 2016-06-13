@@ -127,6 +127,7 @@ class ServerGroupDeepCopyActor() extends PersistentActor with ActorLogging {
         val newLaunchConfiguration = serverGroupState.launchConfiguration.dropSecurityGroupNameLegacySuffixes
           .copy(securityGroups = serverGroupState.launchConfiguration.securityGroups + appName - "nf-elb")
           .copy(keyName = task.target.keyName.getOrElse(serverGroupState.launchConfiguration.keyName))
+          .copy(iamInstanceProfile = task.target.iamRole.getOrElse(serverGroupState.launchConfiguration.iamInstanceProfile))
         val cloneServerGroup = CloneServerGroup(newAutoScalingGroup, newLaunchConfiguration, startDisabled = true, target = task.target)
         if (task.dryRun) {
           val nextAsgIdentity = task.source.identity.nextGroup
