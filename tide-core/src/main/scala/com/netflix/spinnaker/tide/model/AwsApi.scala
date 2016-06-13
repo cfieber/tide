@@ -61,9 +61,9 @@ object AwsApi {
     @JsonIgnore override def akkaIdentifier = s"$account.$region"
   }
 
-  case class VpcLocation(@JsonUnwrapped location: AwsLocation, vpcName: Option[String], keyName: Option[String] = Option.empty)
+  case class VpcLocation(@JsonUnwrapped location: AwsLocation, vpcName: Option[String], keyName: Option[String] = Option.empty, iamRole: Option[String] = Option.empty)
 
-  case class AccountKeyMapping(account: String, keyName: String)
+  case class AccountKeyMapping(account: String, keyName: String, iamRole: Option[String])
 
   trait AwsIdentity extends AkkaClustered
 
